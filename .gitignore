@@ -1,2 +1,4 @@
-*.ini
+/*.ini
+*.swp
+.coverage
 __pycache__

@@ -214,7 +214,7 @@ class Track(object):
                     tracknum = tracknum.split('/', 2)[0]
                 try:
                     tracknum = int(tracknum)
-                except ValueError:
+                except ValueError: # pragma: no cover
                     tracknum = None
             seconds = audio.info.length
 
@@ -229,11 +229,11 @@ class Track(object):
             if 'tracknumber' in audio:
                 tracknum = str(audio['tracknumber'][0]).strip().strip("\x00")
                 # Not sure if Ogg tags actually do this or not
-                if '/' in tracknum:
+                if '/' in tracknum: # pragma: no cover
                     tracknum = tracknum.split('/', 2)[0]
                 try:
                     tracknum = int(tracknum)
-                except ValueError:
+                except ValueError:  # pragma: no cover
                     tracknum = None
             seconds = audio.info.length
 
@@ -248,10 +248,10 @@ class Track(object):
             if '\xa9nam' in audio:
                 title = str(audio['\xa9nam'][0]).strip().strip("\x00")
             if 'trkn' in audio:
-                (tracknum, total_tracks) = audio['trkn']
+                (tracknum, total_tracks) = audio['trkn'][0]
                 try:
                     tracknum = int(tracknum)
-                except ValueError:
+                except ValueError:  # pragma: no cover
                     tracknum = None
             seconds = audio.info.length
 

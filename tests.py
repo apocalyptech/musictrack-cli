@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # vim: set expandtab tabstop=4 shiftwidth=4:
 
+import os
+import uuid
 import unittest
 
 from app import App, Track, Transform, TransformList
@@ -949,6 +951,142 @@ class TransformListDatabaseTests(DatabaseTest):
         self.assertEqual(transform.to_artist, 'Artist 2')
         self.assertEqual(transform.to_album, 'Album 2')
         self.assertEqual(transform.to_title, 'Title 2')
+
+class TrackTests(unittest.TestCase):
+    """
+    Tests for our Track class
+    """
+
+    def track_path(self, filename):
+        """
+        Returns the full path of one of our testdata files
+        """
+        return os.path.join(os.path.dirname(__file__), 'testdata', filename)
+
+    def test_load_mp3_file(self):
+        """
+        Tests loading an mp3 file
+        """
+        track = Track.from_filename(self.track_path('silence.mp3'))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.tracknum, 1)
+        self.assertEqual(track.seconds, 2.0)
+
+    def test_load_mp3_file_total_tracks(self):
+        """
+        Tests loading an mp3 file with tags that include the total number
+        of tracks
+        """
+        track = Track.from_filename(self.track_path('silence-totalnum.mp3'))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.tracknum, 1)
+        self.assertEqual(track.seconds, 2.0)
+
+    def test_load_ogg_file(self):
+        """
+        Tests loading an ogg vorbis file
+        """
+        track = Track.from_filename(self.track_path('silence.ogg'))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.tracknum, 1)
+        self.assertEqual(track.seconds, 2.0)
+
+    def test_load_m4a_file(self):
+        """
+        Tests loading an m4a file
+        """
+        track = Track.from_filename(self.track_path('silence.m4a'))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.tracknum, 1)
+        self.assertEqual(round(track.seconds), 2)
+
+    def test_load_flac_file(self):
+        """
+        Tests loading a flac file
+        """
+        track = Track.from_filename(self.track_path('silence.flac'))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.tracknum, 1)
+        self.assertEqual(track.seconds, 2.0)
+
+    def test_load_invalid_file(self):
+        """
+        Tests loading an invalid file
+        """
+        with self.assertRaises(Exception):
+            track = Track.from_filename(__file__)
+
+    def test_load_missing_file(self):
+        """
+        Tests loading a file which doesn't exist.
+        """
+        # Technically there's a race condition here, but... I'm not
+        # particularly fussed about it.
+
+        filename = '/%s' % (uuid.uuid4())
+        while os.path.exists(filename): # pragma: no cover
+            filename = '/%s' % (uuid.uuid4())
+
+        with self.assertRaises(Exception):
+            track = Track.from_filename(filename)
+
+class AppTests(unittest.TestCase):
+    """
+    Some tests of our main App object
+    """
+
+    def test_missing_database_file(self):
+        """
+        Tests what happens when we're given a database file that doesn't
+        exist
+        """
+        # Technically there's a race condition here, but... I'm not
+        # particularly fussed about it.
+
+        filename = '/%s' % (uuid.uuid4())
+        while os.path.exists(filename): # pragma: no cover
+            filename = '/%s' % (uuid.uuid4())
+
+        with self.assertRaises(Exception):
+            app = App(filename)
+
+    def test_invalid_database_file(self):
+        """
+        Tests what happens when we're given a database file that's invalid
+        """
+        with self.assertRaises(Exception):
+            app = App(__file__)
+
+    def test_ini_file_without_database_section(self):
+        """
+        Tests what happens when we're given a database file without a [database]
+        section in it.
+        """
+        with self.assertRaises(Exception) as cm:
+            app = App(os.path.join('testdata', 'ini_no_section.ini'))
+        self.assertIn('configuration not found', str(cm.exception))
+
+    def test_ini_file_without_variables(self):
+        """
+        Tests what happens when we're given a database file with a [database]
+        section but without one of our required vars.
+        """
+        for varname in ['host', 'name', 'user', 'pass']:
+            with self.subTest(varname=varname):
+                with self.assertRaises(Exception) as cm:
+                    app = App(os.path.join('testdata', 'ini_no_%s.ini' % (varname)))
+                self.assertIn('Configuration val "%s"' % (varname), str(cm.exception))
+
 
 if __name__ == '__main__':
 
