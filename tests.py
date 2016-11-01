@@ -1214,9 +1214,9 @@ class LogTrackTests(DatabaseTest):
         """
         Logs a track.
         """
-        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_path('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
@@ -1240,9 +1240,9 @@ class LogTrackTests(DatabaseTest):
         """
         Logs a track using an alternate source
         """
-        track_id = self.app.log_track(self.track_path('silence.mp3'), source='car')
+        track = self.app.log_track(self.track_path('silence.mp3'), source='car')
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
@@ -1274,10 +1274,10 @@ class LogTrackTests(DatabaseTest):
         """
         Logs a track with a custom time field ("2 hours ago")
         """
-        track_id = self.app.log_track(self.track_path('silence.mp3'),
+        track = self.app.log_track(self.track_path('silence.mp3'),
             timestamp='2 hours ago')
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
@@ -1297,10 +1297,10 @@ class LogTrackTests(DatabaseTest):
         """
         Logs a track with a specific time field ("2016-07-01 12:00:00")
         """
-        track_id = self.app.log_track(self.track_path('silence.mp3'),
+        track = self.app.log_track(self.track_path('silence.mp3'),
             timestamp='2016-07-01 12:00:00')
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
@@ -1326,9 +1326,9 @@ class LogTrackTests(DatabaseTest):
         album_id = self.add_album(artist='Artist', album='Album')
         self.assertNotEqual(album_id, 0)
 
-        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_path('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
@@ -1345,9 +1345,9 @@ class LogTrackTests(DatabaseTest):
         self.assertNotEqual(tf_id, 0)
         self.app.load_data()
 
-        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_path('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['lasttransform'], tf_id)
         self.assertEqual(track_row['artist'], 'Artist 2')
@@ -1369,9 +1369,9 @@ class LogTrackTests(DatabaseTest):
         self.assertNotEqual(tf_id, 0)
         self.app.load_data()
 
-        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_path('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['lasttransform'], tf_id)
         self.assertEqual(track_row['artist'], 'Artist 2')
@@ -1395,9 +1395,9 @@ class LogTrackTests(DatabaseTest):
         self.assertNotEqual(tf_id, 0)
         self.app.load_data()
 
-        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_path('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track_id)
+        track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
         self.assertEqual(track_row['lasttransform'], tf_id)
         self.assertEqual(track_row['artist'], 'Artist 2')

@@ -2,6 +2,7 @@
 # vim: set expandtab tabstop=4 shiftwidth=4:
 
 import os
+import sys
 import time
 import MySQLdb
 import mutagen
@@ -189,6 +190,9 @@ class Track(object):
         self.last_transform = 0
         self.transformed = False
 
+        # Only populated when database actions occur
+        self.pk = 0
+
     def insert(self, db, curs, source, timestamp):
         """
         Inserts ourself into the database.  ``timestamp`` should be a
@@ -216,6 +220,7 @@ class Track(object):
         db.commit()
 
         # Return our created ID
+        self.pk = curs.lastrowid
         return curs.lastrowid
 
     @staticmethod
@@ -495,8 +500,8 @@ class App(object):
 
     def log_track(self, filename, source='xmms', timestamp=None):
         """
-        Logs an instance of playing a track.  Returns the database ID of the
-        inserted track.
+        Logs an instance of playing a track.  Returns the Track object which
+        was created.
         """
 
         # May as well parse our time now, in case it's invalid
@@ -527,36 +532,84 @@ class App(object):
         self.set_album_id(track)
 
         # Save to the database
-        track_id = track.insert(self.db, self.curs, source, timestamp_new)
+        track.insert(self.db, self.curs, source, timestamp_new)
 
         # Return
-        return track_id
+        return track
+
+    @staticmethod
+    def activity_log():
+        """
+        Logs our activity to a logfile in the user's homedir.  Rather improper,
+        really, but this is primarily intended for use in our 'log' CLI util
+        called from Audacious, and if something fails in actually recording the
+        track, I want a log of this stuff that's not dependent on databases
+        working, and I'm too lazy to set up a "real" logging system.
+        """
+        # TODO: If we ever start writing tests for our CLI entry points,
+        # we'll have to make sure that this isn't firing.
+        try:
+            with open(os.path.expanduser(os.path.join('~', 'musictrack-log.txt')), 'a') as df:
+                df.write("---------------------------\n")
+                df.write("Timestamp: %s\n" % (datetime.datetime.now()))
+                df.write("Cwd: %s\n" % (os.getcwd()))
+                df.write("Command: %s\n" % (sys.argv))
+                df.write("\n")
+        except Exception as e:
+            print('Error writing to logfile: %s' % (e))
+
+    @staticmethod
+    def result_log(line):
+        """
+        Logs some further activity to our user homedir.  See ``activity_log()``.
+        """
+        try:
+            with open(os.path.expanduser(os.path.join('~', 'musictrack-log.txt')), 'a') as df:
+                df.write("%s\n" % (line))
+                df.write("\n")
+        except Exception as e:
+            print('Error writing to logfile: %s' % (e))
 
     @staticmethod
     def cli_log():
         """
         Logs an instance of playing a track.  Static entry for commandline use.
         """
-        parser = AppArgumentParser(description='Logs a track being played')
 
-        parser.add_argument('-f', '--filename',
-            type=str,
-            required=True,
-            help='Filename to log')
+        # First up, log what we're doing.
+        App.activity_log()
+        
+        # Now do our stuff:
+        try:
+            parser = AppArgumentParser(description='Logs a track being played')
 
-        parser.add_argument('-s', '--source',
-            choices=['xmms', 'car', 'stereo', 'cafe'],
-            default='xmms',
-            help='Source of the file being played')
+            parser.add_argument('-f', '--filename',
+                type=str,
+                required=True,
+                help='Filename to log')
 
-        parser.add_argument('-t', '--time',
-            type=str,
-            help="""Timestamp to use for the injection.  Defaults to the current time.
-                Should be parseable by the parsedatetime module; many human-readable
-                relative dates ("2 hours ago") should work fine.""")
+            parser.add_argument('-s', '--source',
+                choices=['xmms', 'car', 'stereo', 'cafe'],
+                default='xmms',
+                help='Source of the file being played')
 
-        args = parser.parse_args()
+            parser.add_argument('-t', '--time',
+                type=str,
+                help="""Timestamp to use for the injection.  Defaults to the current time.
+                    Should be parseable by the parsedatetime module; many human-readable
+                    relative dates ("2 hours ago") should work fine.""")
 
-        app = App(args.database)
-        app.log_track(args.filename, args.source, args.time)
-        app.close()
+            args = parser.parse_args()
+
+            app = App(args.database)
+            track = app.log_track(args.filename, source=args.source, timestamp=args.time)
+            result_str = 'Track logged with ID %d: %s / %s (album %d) - %s' % (
+                track.pk, track.artist, track.album, track.album_id, track.title)
+            App.result_log(result_str)
+            print(result_str)
+            app.close()
+
+        except Exception as e:
+
+            App.result_log(str(e))
+            raise e
