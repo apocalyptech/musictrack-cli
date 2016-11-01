@@ -464,20 +464,34 @@ class App(object):
     def _truncate_db(self):
         """
         Truncates all tables from our database.  Use with caution, yes?  Not really
-        intended to be used outside of our test suite.
+        intended to be used outside of our test suite.  In fact, we're going to test
+        for the presence of the string 'test' in the database name before we do
+        anything.
         """
-        self.curs.execute(self.schema_transform_truncate)
-        self.curs.execute(self.schema_track_truncate)
-        self.curs.execute(self.schema_album_truncate)
+        self.curs.execute('select database()')
+        row = self.curs.fetchone()
+        if 'test' in row['database()']:
+            self.curs.execute(self.schema_transform_truncate)
+            self.curs.execute(self.schema_track_truncate)
+            self.curs.execute(self.schema_album_truncate)
+        else:   # pragma: no cover
+            raise Exception('Refusing to truncate tables on non-test database')
 
     def _drop_db(self):
         """
         Drops all tables from our database.  Use with caution, yes?  Not really intended
-        to be used outside of our test suite.
+        to be used outside of our test suite.  In fact, we're going to test
+        for the presence of the string 'test' in the database name before we do
+        anything.
         """
-        self.curs.execute(self.schema_transform_drop)
-        self.curs.execute(self.schema_track_drop)
-        self.curs.execute(self.schema_album_drop)
+        self.curs.execute('select database()')
+        row = self.curs.fetchone()
+        if 'test' in row['database()']:
+            self.curs.execute(self.schema_transform_drop)
+            self.curs.execute(self.schema_track_drop)
+            self.curs.execute(self.schema_album_drop)
+        else:   # pragma: no cover
+            raise Exception('Refusing to drop tables on non-test database')
 
     def log_track(self, filename, source='xmms', timestamp=None):
         """

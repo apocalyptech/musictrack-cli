@@ -1417,6 +1417,6 @@ if __name__ == '__main__':
     unittest.main(exit=False)
 
     # Tear down database
-    pp = App('dbtests.ini', load_data=False)
-    pp._drop_db()
-    pp.close()
+    app = App('dbtests.ini', load_data=False)
+    app._drop_db()
+    app.close()
