@@ -581,6 +581,7 @@ class App(object):
         
         # Now do our stuff:
         try:
+            # Parse arguments
             parser = AppArgumentParser(description='Logs a track being played')
 
             parser.add_argument('-f', '--filename',
@@ -601,6 +602,7 @@ class App(object):
 
             args = parser.parse_args()
 
+            # Do the work
             app = App(args.database)
             track = app.log_track(args.filename, source=args.source, timestamp=args.time)
             result_str = 'Track logged with ID %d: %s / %s (album %d) - %s' % (
