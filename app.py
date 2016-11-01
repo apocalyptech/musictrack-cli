@@ -7,6 +7,7 @@ import MySQLdb
 import mutagen
 import argparse
 import datetime
+import warnings
 import configparser
 import parsedatetime
 
@@ -190,12 +191,14 @@ class Track(object):
 
     def insert(self, db, curs, source, timestamp):
         """
-        Inserts ourself into the database.  ``timestamp`` should be a ``datetime.datetime``
-        object.
+        Inserts ourself into the database.  ``timestamp`` should be a
+        ``datetime.datetime`` object.  Returns the database ID of the
+        new track.
         """
 
         # Make a list of our fields, and our data
-        fields = ['lasttransform', 'album_id', 'artist', 'album', 'title', 'source', 'timestamp', 'seconds']
+        fields = ['lasttransform', 'album_id', 'artist', 'album',
+            'title', 'source', 'timestamp', 'seconds']
         data = [self.last_transform, self.album_id,
             self.artist, self.album, self.title,
             source, timestamp, self.seconds]
@@ -211,6 +214,9 @@ class Track(object):
         # .... aaand run it!
         curs.execute(sql, data)
         db.commit()
+
+        # Return our created ID
+        return curs.lastrowid
 
     @staticmethod
     def from_filename(filename):
@@ -396,6 +402,10 @@ class App(object):
         self.db = MySQLdb.connect(host=db_host, user=db_user, passwd=db_pass, db=db_name)
         self.curs = self.db.cursor(MySQLdb.cursors.DictCursor)
 
+        # Set sql_mode to traditional.  This will cause Exceptions to be thrown for stuff
+        # which would otherwise only throw warnings
+        self.curs.execute('SET @@sql_mode:=TRADITIONAL')
+
         # Get our transforms
         if load_data:
             self.load_data()
@@ -408,10 +418,11 @@ class App(object):
         """
         self.transforms = TransformList.from_database(self.curs)
 
-    def get_album_id(self, track):
+    def set_album_id(self, track):
         """
-        Get the album associated with the passed-in ``track``, if possible.  Returns
-        0 if no album can be found.
+        Sets the album associated with the passed-in ``track``, if possible.  Updates
+        the ``track`` object, and also returns the album ID.  Returns 0 if no album can
+        be found.
         """
 
         # Try a specific album by the artist
@@ -419,6 +430,7 @@ class App(object):
             (track.artist, track.album))
         if self.curs.rowcount == 1:
             row = self.curs.fetchone()
+            track.album_id = row['alid']
             return row['alid']
         
         # Try for Various-Artists albums
@@ -426,9 +438,11 @@ class App(object):
             ('Various', track.album))
         if self.curs.rowcount == 1:
             row = self.curs.fetchone()
+            track.album_id = row['alid']
             return row['alid']
 
         # Fall back to 0
+        track.album_id = 0
         return 0
 
     def close(self):
@@ -465,21 +479,29 @@ class App(object):
         self.curs.execute(self.schema_track_drop)
         self.curs.execute(self.schema_album_drop)
 
-    def log_track(self, filename, source, timestamp_orig=None):
+    def log_track(self, filename, source='xmms', timestamp=None):
         """
-        Logs an instance of playing a track
+        Logs an instance of playing a track.  Returns the database ID of the
+        inserted track.
         """
 
         # May as well parse our time now, in case it's invalid
         # parsedatetime is rather too forgiving in many cases for my tastes; ah well.
-        if timestamp_orig is None:
-            timestamp = time.localtime()
+        if timestamp is None:
+            timestamp_new = time.localtime()
         else:
-            cal = parsedatetime.Calendar()
-            (timestamp, status) = cal.parse(timestamp_orig)
-            if status == 0:
-                raise Exception('Could not parse requested timestamp of "%s"' % (timestamp_orig))
-        timestamp = datetime.datetime.fromtimestamp(time.mktime(timestamp))
+            # parsedatetime says that VERSION_FLAG_STYLE (the default) will be deprecated in
+            # 2.0 and to start using VERSION_CONTEXT_STYLE instead, but there's no docs for
+            # doing so online and naively just setting it causes stuff to Not Work, and I don't
+            # particularly feel like grabbing the code and building the docs myself.  So,
+            # whatever.  I'm using the soon-to-be-deprecated stuff instead.
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                cal = parsedatetime.Calendar(version=parsedatetime.VERSION_FLAG_STYLE)
+                (timestamp_new, status) = cal.parse(timestamp)
+                if status == 0:
+                    raise Exception('Could not parse requested timestamp of "%s"' % (timestamp))
+        timestamp_new = datetime.datetime.fromtimestamp(time.mktime(timestamp_new))
 
         # Load the track
         track = Track.from_filename(filename)
@@ -488,13 +510,13 @@ class App(object):
         self.transforms.apply_track(track)
 
         # Associate with an album, if possible
-        track.album_id = self.get_album_id(track)
+        self.set_album_id(track)
 
         # Save to the database
-        track.insert(self.db, self.curs, source, timestamp)
+        track_id = track.insert(self.db, self.curs, source, timestamp_new)
 
-        # Clean up
-        self.close()
+        # Return
+        return track_id
 
     @staticmethod
     def cli_log():
@@ -523,3 +545,4 @@ class App(object):
 
         app = App(args.database)
         app.log_track(args.filename, args.source, args.time)
+        app.close()

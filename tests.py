@@ -4,6 +4,7 @@
 import os
 import uuid
 import unittest
+import datetime
 
 from app import App, Track, Transform, TransformList
 
@@ -27,6 +28,7 @@ class DatabaseTest(unittest.TestCase):
         """
         Adds a new transform to our database, given the specified attributes.  Will
         commit by default, but if you pass in ``commit`` = ``False`` we will not.
+        Returns the primary key of the new transform.
         """
         self.app.curs.execute("""insert into transform (
             artistcond, albumcond, titlecond,
@@ -44,6 +46,44 @@ class DatabaseTest(unittest.TestCase):
         ))
         if commit:
             self.app.db.commit()
+        return self.app.curs.lastrowid
+
+    def add_album(self, artist='', album='', totaltracks=0, totalseconds=0,
+            altype='album', commit=True):
+        """
+        Adds a new album to our database, given the specified attributes.  Will
+        commit by default, but if you pass in ``commit`` = ``False`` we will not.
+        Returns the primary key of the new album.
+        """
+        self.app.curs.execute("""insert into album(
+            alartist, alalbum, totaltracks, totalseconds, altype
+            ) values ( %s, %s, %s, %s, %s)""", (
+                artist, album, totaltracks, totalseconds, altype
+        ))
+        if commit:
+            self.app.db.commit()
+        return self.app.curs.lastrowid
+
+    def get_track_count(self):
+        """
+        Gets a count of tracks in our database
+        """
+        self.app.curs.execute('select count(*) c from track')
+        if self.app.curs.rowcount == 1:
+            row = self.app.curs.fetchone()
+            return row['c']
+        else:   # pragma: no cover
+            return 0
+
+    def get_track_by_id(self, track_id):
+        """
+        Gets a track by track ID.  Returns the row.
+        """
+        self.app.curs.execute('select * from track where id=%s', (track_id,))
+        if self.app.curs.rowcount == 1:
+            return self.app.curs.fetchone()
+        else:
+            return None
 
 class TransformTests(unittest.TestCase):
     """
@@ -1087,6 +1127,284 @@ class AppTests(unittest.TestCase):
                     app = App(os.path.join('testdata', 'ini_no_%s.ini' % (varname)))
                 self.assertIn('Configuration val "%s"' % (varname), str(cm.exception))
 
+class AppDatabaseTests(DatabaseTest):
+    """
+    Tests on our main App class which require a database.
+    """
+
+    def test_get_album_id_none_found(self):
+        """
+        Look up an album ID when we don't have one.
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        album_id = self.app.set_album_id(track)
+        self.assertEqual(album_id, 0)
+        self.assertEqual(track.album_id, 0)
+
+    def test_get_album_id_regular_album(self):
+        """
+        Look up an album ID when we have a 'regular' album match
+        """
+        album_id = self.add_album(artist='Artist', album='Album')
+        self.assertNotEqual(album_id, 0)
+        track = Track(artist='Artist', album='Album', title='Title')
+        track_album_id = self.app.set_album_id(track)
+        self.assertEqual(track_album_id, album_id)
+        self.assertEqual(track.album_id, album_id)
+
+    def test_get_album_id_various_album(self):
+        """
+        Look up an album ID when we have a Various Artists album match
+        """
+        album_id = self.add_album(artist='Various', album='Album')
+        self.assertNotEqual(album_id, 0)
+        track = Track(artist='Artist', album='Album', title='Title')
+        track_album_id = self.app.set_album_id(track)
+        self.assertEqual(track_album_id, album_id)
+        self.assertEqual(track.album_id, album_id)
+
+    def test_get_album_id_regular_and_various_album(self):
+        """
+        Look up an album ID when we have both a regular and Various Artists
+        album match.  We should default to the regular one.
+        """
+        var_album_id = self.add_album(artist='Various', album='Album')
+        self.assertNotEqual(var_album_id, 0)
+        reg_album_id = self.add_album(artist='Artist', album='Album')
+        self.assertNotEqual(reg_album_id, 0)
+        track = Track(artist='Artist', album='Album', title='Title')
+        track_album_id = self.app.set_album_id(track)
+        self.assertEqual(track_album_id, reg_album_id)
+        self.assertEqual(track.album_id, reg_album_id)
+
+class LogTrackTests(DatabaseTest):
+    """
+    Tests for our log_track function, the main workhorse of our track-logging
+    stuff.
+    """
+
+    def track_path(self, filename):
+        """
+        Returns the full path of one of our testdata files
+        """
+        return os.path.join(os.path.dirname(__file__), 'testdata', filename)
+
+    def test_log_track_file_not_found(self):
+        """
+        Tries logging a track which doesn't exist
+        """
+
+        filename = '/%s' % (uuid.uuid4())
+        while os.path.exists(filename): # pragma: no cover
+            filename = '/%s' % (uuid.uuid4())
+
+        with self.assertRaises(Exception):
+            self.app.log_track(filename)
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_track_invalid_file(self):
+        """
+        Tries logging a track which isn't actually a music file
+        """
+        with self.assertRaises(Exception):
+            self.app.log_track(__file__)
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_track_regular(self):
+        """
+        Logs a track.
+        """
+        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        self.assertEqual(track_row['album_id'], 0)
+        self.assertEqual(track_row['tracknum'], 1)
+        self.assertEqual(track_row['seconds'], 2)
+        self.assertEqual(track_row['lasttransform'], 0)
+        
+        # This is a bit fuzzy, since in a worst-case scenario we may have
+        # timestamps differing by a second or so.  To be extra-cautious,
+        # we'll just make sure the timestamp is +/- ten seconds of
+        # what we think it should be.
+        timestamp = track_row['timestamp'].timestamp()
+        now_ts = datetime.datetime.now().timestamp()
+        self.assertGreater(timestamp, now_ts-10)
+        self.assertLess(timestamp, now_ts+10)
+
+    def test_log_track_alternate_source(self):
+        """
+        Logs a track using an alternate source
+        """
+        track_id = self.app.log_track(self.track_path('silence.mp3'), source='car')
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'car')
+        self.assertEqual(track_row['album_id'], 0)
+        self.assertEqual(track_row['tracknum'], 1)
+        self.assertEqual(track_row['seconds'], 2)
+        self.assertEqual(track_row['lasttransform'], 0)
+        
+        # This is a bit fuzzy, since in a worst-case scenario we may have
+        # timestamps differing by a second or so.  To be extra-cautious,
+        # we'll just make sure the timestamp is +/- ten seconds of
+        # what we think it should be.
+        timestamp = track_row['timestamp'].timestamp()
+        now_ts = datetime.datetime.now().timestamp()
+        self.assertGreater(timestamp, now_ts-10)
+        self.assertLess(timestamp, now_ts+10)
+
+    def test_log_track_invalid_source(self):
+        """
+        Logs a track using an invalid source
+        """
+        with self.assertRaises(Exception):
+            self.app.log_track(self.track_path('silence.mp3'), source='foo')
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_track_timestamp_2hr(self):
+        """
+        Logs a track with a custom time field ("2 hours ago")
+        """
+        track_id = self.app.log_track(self.track_path('silence.mp3'),
+            timestamp='2 hours ago')
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        
+        # This is a bit fuzzy, since in a worst-case scenario we may have
+        # timestamps differing by a second or so.  To be extra-cautious,
+        # we'll just make sure the timestamp is +/- ten seconds of
+        # what we think it should be.
+        timestamp = track_row['timestamp'].timestamp()
+        two_hours = datetime.datetime.now().timestamp() - 7200
+        self.assertGreater(timestamp, two_hours-10)
+        self.assertLess(timestamp, two_hours+10)
+
+    def test_log_track_timestamp_specific_date(self):
+        """
+        Logs a track with a specific time field ("2016-07-01 12:00:00")
+        """
+        track_id = self.app.log_track(self.track_path('silence.mp3'),
+            timestamp='2016-07-01 12:00:00')
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        
+        timestamp = track_row['timestamp']
+        compare_date = datetime.datetime(2016, 7, 1, 12, 0, 0)
+        self.assertEqual(timestamp, compare_date)
+
+    def test_log_track_invalid_timestamp(self):
+        """
+        Logs a track using a completely invalid timestamp
+        """
+        with self.assertRaises(Exception):
+            self.app.log_track(self.track_path('silence.mp3'), timestamp='foo')
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_track_with_album_association(self):
+        """
+        Tests logging a track with an album association.
+        """
+        album_id = self.add_album(artist='Artist', album='Album')
+        self.assertNotEqual(album_id, 0)
+
+        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        self.assertEqual(track_row['album_id'], album_id)
+
+    def test_log_track_with_transform(self):
+        """
+        Tests logging a track when we have a transform in the DB
+        """
+        tf_id = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        self.assertNotEqual(tf_id, 0)
+        self.app.load_data()
+
+        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['lasttransform'], tf_id)
+        self.assertEqual(track_row['artist'], 'Artist 2')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+
+    def test_log_track_with_transform_and_album(self):
+        """
+        Tests logging a track when we have a transform in the DB, and also an
+        album which we'll get associated with, post-transform.
+        """
+
+        album_id = self.add_album(artist='Artist 2', album='Album')
+        self.assertNotEqual(album_id, 0)
+
+        tf_id = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        self.assertNotEqual(tf_id, 0)
+        self.app.load_data()
+
+        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['lasttransform'], tf_id)
+        self.assertEqual(track_row['artist'], 'Artist 2')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        self.assertEqual(track_row['album_id'], album_id)
+
+    def test_log_track_with_transform_and_nonmatching_album(self):
+        """
+        Tests logging a track when we have a transform in the DB, and also an
+        album, though the album would only match if the transforms weren't
+        done.  So the track should remain albumless.
+        """
+
+        album_id = self.add_album(artist='Artist', album='Album')
+        self.assertNotEqual(album_id, 0)
+
+        tf_id = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        self.assertNotEqual(tf_id, 0)
+        self.app.load_data()
+
+        track_id = self.app.log_track(self.track_path('silence.mp3'))
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(track_id)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['lasttransform'], tf_id)
+        self.assertEqual(track_row['artist'], 'Artist 2')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        self.assertEqual(track_row['album_id'], 0)
 
 if __name__ == '__main__':
 
