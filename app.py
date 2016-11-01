@@ -2,9 +2,11 @@
 # vim: set expandtab tabstop=4 shiftwidth=4:
 
 import os
+import time
 import MySQLdb
 import mutagen
 import argparse
+import datetime
 import configparser
 import parsedatetime
 
@@ -181,8 +183,34 @@ class Track(object):
         self.tracknum = tracknum
         self.seconds = seconds
 
+        self.album_id = 0
+
         self.last_transform = 0
         self.transformed = False
+
+    def insert(self, db, curs, source, timestamp):
+        """
+        Inserts ourself into the database.  ``timestamp`` should be a ``datetime.datetime``
+        object.
+        """
+
+        # Make a list of our fields, and our data
+        fields = ['lasttransform', 'album_id', 'artist', 'album', 'title', 'source', 'timestamp', 'seconds']
+        data = [self.last_transform, self.album_id,
+            self.artist, self.album, self.title,
+            source, timestamp, self.seconds]
+        if self.tracknum is not None:
+            fields.append('tracknum')
+            data.append(self.tracknum)
+        
+        # Construct our insert sql
+        sql = 'insert into track (%s) values (%s)' % (
+            ', '.join(fields),
+            ', '.join('%s' for field in fields))
+
+        # .... aaand run it!
+        curs.execute(sql, data)
+        db.commit()
 
     @staticmethod
     def from_filename(filename):
@@ -380,6 +408,29 @@ class App(object):
         """
         self.transforms = TransformList.from_database(self.curs)
 
+    def get_album_id(self, track):
+        """
+        Get the album associated with the passed-in ``track``, if possible.  Returns
+        0 if no album can be found.
+        """
+
+        # Try a specific album by the artist
+        self.curs.execute('select alid from album where alartist=%s and alalbum=%s limit 1',
+            (track.artist, track.album))
+        if self.curs.rowcount == 1:
+            row = self.curs.fetchone()
+            return row['alid']
+        
+        # Try for Various-Artists albums
+        self.curs.execute('select alid from album where alartist=%s and alalbum=%s limit 1',
+            ('Various', track.album))
+        if self.curs.rowcount == 1:
+            row = self.curs.fetchone()
+            return row['alid']
+
+        # Fall back to 0
+        return 0
+
     def close(self):
         """
         Cleanup routines.  Not *really* needed, but whatever.
@@ -414,10 +465,21 @@ class App(object):
         self.curs.execute(self.schema_track_drop)
         self.curs.execute(self.schema_album_drop)
 
-    def log_track(self, filename, source, time=None):
+    def log_track(self, filename, source, timestamp_orig=None):
         """
         Logs an instance of playing a track
         """
+
+        # May as well parse our time now, in case it's invalid
+        # parsedatetime is rather too forgiving in many cases for my tastes; ah well.
+        if timestamp_orig is None:
+            timestamp = time.localtime()
+        else:
+            cal = parsedatetime.Calendar()
+            (timestamp, status) = cal.parse(timestamp_orig)
+            if status == 0:
+                raise Exception('Could not parse requested timestamp of "%s"' % (timestamp_orig))
+        timestamp = datetime.datetime.fromtimestamp(time.mktime(timestamp))
 
         # Load the track
         track = Track.from_filename(filename)
@@ -425,14 +487,11 @@ class App(object):
         # Apply transforms
         self.transforms.apply_track(track)
 
-        # Figure out the SQL we'll be using
-        fields = ['lasttransform', 'album_id', 'artist', 'title', 'source', 'timestamp', 'seconds']
-        if track.tracknum is not None:
-            fields.append('tracknum')
+        # Associate with an album, if possible
+        track.album_id = self.get_album_id(track)
 
-        if time is not None:
-            cal = parsedatetime.Calendar()
-            cal.parse(time)
+        # Save to the database
+        track.insert(self.db, self.curs, source, timestamp)
 
         # Clean up
         self.close()
