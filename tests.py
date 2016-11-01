@@ -1179,8 +1179,9 @@ class AppDatabaseTests(DatabaseTest):
 
 class LogTrackTests(DatabaseTest):
     """
-    Tests for our log_track function, the main workhorse of our track-logging
-    stuff.
+    Tests for our log_track function, which handles the addition of a single
+    Track object to the database (applying transforms and associating to
+    albums, etc).
     """
 
     def track_path(self, filename):
@@ -1188,33 +1189,19 @@ class LogTrackTests(DatabaseTest):
         Returns the full path of one of our testdata files
         """
         return os.path.join(os.path.dirname(__file__), 'testdata', filename)
-
-    def test_log_track_file_not_found(self):
+    
+    def track_obj(self, filename='silence.mp3'):
         """
-        Tries logging a track which doesn't exist
+        Returns a Track object given a music filename inside our testdata
+        directory.
         """
-
-        filename = '/%s' % (uuid.uuid4())
-        while os.path.exists(filename): # pragma: no cover
-            filename = '/%s' % (uuid.uuid4())
-
-        with self.assertRaises(Exception):
-            self.app.log_track(filename)
-        self.assertEqual(self.get_track_count(), 0)
-
-    def test_log_track_invalid_file(self):
-        """
-        Tries logging a track which isn't actually a music file
-        """
-        with self.assertRaises(Exception):
-            self.app.log_track(__file__)
-        self.assertEqual(self.get_track_count(), 0)
+        return Track.from_filename(self.track_path(filename))
 
     def test_log_track_regular(self):
         """
         Logs a track.
         """
-        track = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_obj('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
@@ -1240,7 +1227,7 @@ class LogTrackTests(DatabaseTest):
         """
         Logs a track using an alternate source
         """
-        track = self.app.log_track(self.track_path('silence.mp3'), source='car')
+        track = self.app.log_track(self.track_obj('silence.mp3'), source='car')
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
@@ -1267,56 +1254,7 @@ class LogTrackTests(DatabaseTest):
         Logs a track using an invalid source
         """
         with self.assertRaises(Exception):
-            self.app.log_track(self.track_path('silence.mp3'), source='foo')
-        self.assertEqual(self.get_track_count(), 0)
-
-    def test_log_track_timestamp_2hr(self):
-        """
-        Logs a track with a custom time field ("2 hours ago")
-        """
-        track = self.app.log_track(self.track_path('silence.mp3'),
-            timestamp='2 hours ago')
-        self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track.pk)
-        self.assertNotEqual(track_row, None)
-        self.assertEqual(track_row['artist'], 'Artist')
-        self.assertEqual(track_row['album'], 'Album')
-        self.assertEqual(track_row['title'], 'Track')
-        self.assertEqual(track_row['source'], 'xmms')
-        
-        # This is a bit fuzzy, since in a worst-case scenario we may have
-        # timestamps differing by a second or so.  To be extra-cautious,
-        # we'll just make sure the timestamp is +/- ten seconds of
-        # what we think it should be.
-        timestamp = track_row['timestamp'].timestamp()
-        two_hours = datetime.datetime.now().timestamp() - 7200
-        self.assertGreater(timestamp, two_hours-10)
-        self.assertLess(timestamp, two_hours+10)
-
-    def test_log_track_timestamp_specific_date(self):
-        """
-        Logs a track with a specific time field ("2016-07-01 12:00:00")
-        """
-        track = self.app.log_track(self.track_path('silence.mp3'),
-            timestamp='2016-07-01 12:00:00')
-        self.assertEqual(self.get_track_count(), 1)
-        track_row = self.get_track_by_id(track.pk)
-        self.assertNotEqual(track_row, None)
-        self.assertEqual(track_row['artist'], 'Artist')
-        self.assertEqual(track_row['album'], 'Album')
-        self.assertEqual(track_row['title'], 'Track')
-        self.assertEqual(track_row['source'], 'xmms')
-        
-        timestamp = track_row['timestamp']
-        compare_date = datetime.datetime(2016, 7, 1, 12, 0, 0)
-        self.assertEqual(timestamp, compare_date)
-
-    def test_log_track_invalid_timestamp(self):
-        """
-        Logs a track using a completely invalid timestamp
-        """
-        with self.assertRaises(Exception):
-            self.app.log_track(self.track_path('silence.mp3'), timestamp='foo')
+            self.app.log_track(self.track_obj('silence.mp3'), source='foo')
         self.assertEqual(self.get_track_count(), 0)
 
     def test_log_track_with_album_association(self):
@@ -1326,7 +1264,7 @@ class LogTrackTests(DatabaseTest):
         album_id = self.add_album(artist='Artist', album='Album')
         self.assertNotEqual(album_id, 0)
 
-        track = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_obj('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
@@ -1345,7 +1283,7 @@ class LogTrackTests(DatabaseTest):
         self.assertNotEqual(tf_id, 0)
         self.app.load_data()
 
-        track = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_obj('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
@@ -1369,7 +1307,7 @@ class LogTrackTests(DatabaseTest):
         self.assertNotEqual(tf_id, 0)
         self.app.load_data()
 
-        track = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_obj('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
@@ -1395,7 +1333,7 @@ class LogTrackTests(DatabaseTest):
         self.assertNotEqual(tf_id, 0)
         self.app.load_data()
 
-        track = self.app.log_track(self.track_path('silence.mp3'))
+        track = self.app.log_track(self.track_obj('silence.mp3'))
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(track.pk)
         self.assertNotEqual(track_row, None)
@@ -1405,6 +1343,145 @@ class LogTrackTests(DatabaseTest):
         self.assertEqual(track_row['title'], 'Track')
         self.assertEqual(track_row['source'], 'xmms')
         self.assertEqual(track_row['album_id'], 0)
+
+class LogFilenamesTests(DatabaseTest):
+    """
+    Tests for our log_filenames function, which serves as the main entry point
+    for our CLI log function, and handles loading filenames into Track objects,
+    parsing user-provided dates, and looping through multiple files if required.
+    """
+
+    def track_path(self, filename):
+        """
+        Returns the full path of one of our testdata files
+        """
+        return os.path.join(os.path.dirname(__file__), 'testdata', filename)
+
+    def test_log_filenames_file_not_found(self):
+        """
+        Tries logging a track which doesn't exist
+        """
+
+        filename = '/%s' % (uuid.uuid4())
+        while os.path.exists(filename): # pragma: no cover
+            filename = '/%s' % (uuid.uuid4())
+
+        with self.assertRaises(Exception):
+            self.app.log_filenames([filename])
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_filenames_invalid_file(self):
+        """
+        Tries logging a track which isn't actually a music file
+        """
+        with self.assertRaises(Exception):
+            self.app.log_filenames([__file__])
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_filenames_timestamp_2hr(self):
+        """
+        Logs a track with a custom time field ("2 hours ago")
+        """
+        (tracks, statuses) = self.app.log_filenames(self.track_path('silence.mp3'),
+            timestamp='2 hours ago')
+        self.assertEqual(self.get_track_count(), 1)
+        self.assertEqual(len(tracks), 1)
+        track_row = self.get_track_by_id(tracks[0].pk)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        
+        # This is a bit fuzzy, since in a worst-case scenario we may have
+        # timestamps differing by a second or so.  To be extra-cautious,
+        # we'll just make sure the timestamp is +/- ten seconds of
+        # what we think it should be.
+        timestamp = track_row['timestamp'].timestamp()
+        two_hours = datetime.datetime.now().timestamp() - 7200
+        self.assertGreater(timestamp, two_hours-10)
+        self.assertLess(timestamp, two_hours+10)
+
+    def test_log_filenames_timestamp_specific_date(self):
+        """
+        Logs a track with a specific time field ("2016-07-01 12:00:00")
+        """
+        (tracks, statuses) = self.app.log_filenames(self.track_path('silence.mp3'),
+            timestamp='2016-07-01 12:00:00')
+        self.assertEqual(self.get_track_count(), 1)
+        self.assertEqual(len(tracks), 1)
+        track_row = self.get_track_by_id(tracks[0].pk)
+        self.assertNotEqual(track_row, None)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['source'], 'xmms')
+        
+        timestamp = track_row['timestamp']
+        compare_date = datetime.datetime(2016, 7, 1, 12, 0, 0)
+        self.assertEqual(timestamp, compare_date)
+
+    def test_log_filenames_invalid_timestamp(self):
+        """
+        Logs a track using a completely invalid timestamp
+        """
+        with self.assertRaises(Exception):
+            self.app.log_filenames(self.track_path('silence.mp3'), timestamp='foo')
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_log_filenames_no_filenames(self):
+        """
+        Calls our method without actually passing in any filenames.
+        """
+        (tracks, statuses) = self.app.log_filenames([])
+        self.assertEqual(len(tracks), 0)
+        self.assertEqual(len(statuses), 1)
+        self.assertIn('No filenames', statuses[0])
+
+    def test_log_filenames_multiple_no_date(self):
+        """
+        Log multiple filenames at the same time, without specifying a date.
+        Inserted timestamps should all occur before the current time.
+        """
+        now = datetime.datetime.now()
+        (tracks, statuses) = self.app.log_filenames([self.track_path('silence.mp3')]*5)
+        self.assertEqual(len(tracks), 5)
+        self.assertEqual(self.get_track_count(), 5)
+        track_objs = []
+        for (idx, track) in enumerate(tracks):
+            with self.subTest(idx=idx):
+                track_obj = self.get_track_by_id(track.pk)
+                track_objs.append(track_obj)
+                self.assertLess(track_obj['timestamp'], now)
+                if idx > 0:
+                    self.assertGreater(track_obj['timestamp'],
+                        track_objs[idx-1]['timestamp'])
+
+    def test_log_filenames_multiple_date_in_past(self):
+        """
+        Log multiple filenames at the same time, specifying a date in the
+        past.  All tracks should be at the start date or later.  Being a bit
+        fuzzy on the comparison time since technically we could end up with
+        at least a second difference.
+        """
+        time_lower = datetime.datetime.now() - datetime.timedelta(seconds=7210)
+        time_upper = time_lower + datetime.timedelta(seconds=20)
+        (tracks, statuses) = self.app.log_filenames(
+            [self.track_path('silence.mp3')]*5,
+            timestamp='2 hours ago'
+        )
+        self.assertEqual(len(tracks), 5)
+        self.assertEqual(self.get_track_count(), 5)
+        track_objs = []
+        for (idx, track) in enumerate(tracks):
+            with self.subTest(idx=idx):
+                track_obj = self.get_track_by_id(track.pk)
+                track_objs.append(track_obj)
+                self.assertGreaterEqual(track_obj['timestamp'], time_lower)
+                self.assertLess(track_obj['timestamp'], time_upper)
+                if idx > 0:
+                    self.assertGreater(track_obj['timestamp'],
+                        track_objs[idx-1]['timestamp'])
 
 if __name__ == '__main__':
 

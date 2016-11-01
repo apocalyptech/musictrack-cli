@@ -193,11 +193,12 @@ class Track(object):
         # Only populated when database actions occur
         self.pk = 0
 
-    def insert(self, db, curs, source, timestamp):
+    def insert(self, db, curs, source, timestamp, commit=True):
         """
         Inserts ourself into the database.  ``timestamp`` should be a
         ``datetime.datetime`` object.  Returns the database ID of the
-        new track.
+        new track.  If ``commit`` is ``False``, we will not commit
+        the transaction (making passing in ``db`` silly, but whatever).
         """
 
         # Make a list of our fields, and our data
@@ -217,11 +218,19 @@ class Track(object):
 
         # .... aaand run it!
         curs.execute(sql, data)
-        db.commit()
+        if commit:
+            db.commit()
 
         # Return our created ID
         self.pk = curs.lastrowid
         return curs.lastrowid
+
+    def status_str(self):
+        """
+        Returns a str which identifies ourself for logging purposes
+        """
+        return 'ID %d: %s / %s (album %d) - %s' % (
+            self.pk, self.artist, self.album, self.album_id, self.title)
 
     @staticmethod
     def from_filename(filename):
@@ -498,16 +507,50 @@ class App(object):
         else:   # pragma: no cover
             raise Exception('Refusing to drop tables on non-test database')
 
-    def log_track(self, filename, source='xmms', timestamp=None):
+    def log_track(self, track, source='xmms', timestamp=None, commit=True):
         """
-        Logs an instance of playing a track.  Returns the Track object which
-        was created.
+        Logs an instance of playing a track, given a Track object.  Returns
+        the Track object.  ``timestamp`` should be a ``datetime.datetime``
+        object, but will default to the current time if not specified.
+        If ``commit`` is passed in as ``False``, the transaction will not
+        be committed.
         """
 
-        # May as well parse our time now, in case it's invalid
-        # parsedatetime is rather too forgiving in many cases for my tastes; ah well.
+        # Default to now, if not given a timestamp
         if timestamp is None:
-            timestamp_new = time.localtime()
+            timestamp = datetime.datetime.now()
+
+        # Apply transforms
+        self.transforms.apply_track(track)
+
+        # Associate with an album, if possible
+        self.set_album_id(track)
+
+        # Save to the database
+        track.insert(self.db, self.curs, source, timestamp, commit=commit)
+
+        # Return
+        return track
+
+    def log_filenames(self, filenames, source='xmms', timestamp=None):
+        """
+        Logs the specified filenames.  ``filenames`` should be a list of
+        strings containing the filenames, but can also be a string, in which
+        case only that one filename will be processed.  ``timestamp`` should
+        be a text value, most likely passed in from the user.  Returns a
+        tuple, whose first element is the list of Track objects added, and
+        whose second element is a list of statuses suitable for logging or
+        displaying to the user.
+        """
+
+        # If we've been passed a string, turn it into a list.  Not too proper,
+        # but convenient.
+        if isinstance(filenames, str):
+            filenames = [filenames]
+
+        # Parse our time now, in case it's invalid.
+        if timestamp is None:
+            timestamp_start = time.localtime()
         else:
             # parsedatetime says that VERSION_FLAG_STYLE (the default) will be deprecated in
             # 2.0 and to start using VERSION_CONTEXT_STYLE instead, but there's no docs for
@@ -517,25 +560,43 @@ class App(object):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 cal = parsedatetime.Calendar(version=parsedatetime.VERSION_FLAG_STYLE)
-                (timestamp_new, status) = cal.parse(timestamp)
+                (timestamp_start, status) = cal.parse(timestamp)
                 if status == 0:
                     raise Exception('Could not parse requested timestamp of "%s"' % (timestamp))
-        timestamp_new = datetime.datetime.fromtimestamp(time.mktime(timestamp_new))
+        timestamp_start = datetime.datetime.fromtimestamp(time.mktime(timestamp_start))
 
-        # Load the track
-        track = Track.from_filename(filename)
+        # Now process
+        statuses = []
+        tracks = []
+        if len(filenames) == 0:
+            statuses.append('No filenames specified')
+        elif len(filenames) == 1:
+            track = self.log_track(
+                Track.from_filename(filenames[0]),
+                source=source,
+                timestamp=timestamp_start)
+            tracks.append(track)
+            statuses.append('Track logged: %s' % (track.status_str()))
+        else:
+            total_seconds = 0
+            for filename in filenames:
+                tracks.append(Track.from_filename(filename))
+                total_seconds += tracks[-1].seconds
+            if timestamp is None:
+                timestamp_start -= datetime.timedelta(seconds=total_seconds)
+            for track in tracks:
+                self.log_track(track,
+                    source=source,
+                    timestamp=timestamp_start,
+                    commit=False)
+                statuses.append('Track logged at "%s": %s' % (
+                    timestamp_start.replace(microsecond=0),
+                    track.status_str()))
+                timestamp_start += datetime.timedelta(seconds=track.seconds)
+            self.db.commit()
 
-        # Apply transforms
-        self.transforms.apply_track(track)
-
-        # Associate with an album, if possible
-        self.set_album_id(track)
-
-        # Save to the database
-        track.insert(self.db, self.curs, source, timestamp_new)
-
-        # Return
-        return track
+        # Return what we did
+        return (tracks, statuses)
 
     @staticmethod
     def activity_log():
@@ -550,8 +611,8 @@ class App(object):
         # we'll have to make sure that this isn't firing.
         try:
             with open(os.path.expanduser(os.path.join('~', 'musictrack-log.txt')), 'a') as df:
-                df.write("---------------------------\n")
-                df.write("Timestamp: %s\n" % (datetime.datetime.now()))
+                df.write("%s\n" % ('-'*60))
+                df.write("Timestamp: %s\n" % (datetime.datetime.now().replace(microsecond=0)))
                 df.write("Cwd: %s\n" % (os.getcwd()))
                 df.write("Command: %s\n" % (sys.argv))
                 df.write("\n")
@@ -571,9 +632,23 @@ class App(object):
             print('Error writing to logfile: %s' % (e))
 
     @staticmethod
+    def result_logs(lines):
+        """
+        Logs some further activity to our user homedir.  See ``activity_log()``.
+        """
+        if len(lines) > 0:
+            try:
+                with open(os.path.expanduser(os.path.join('~', 'musictrack-log.txt')), 'a') as df:
+                    for line in lines:
+                        df.write("%s\n" % (line))
+                    df.write("\n")
+            except Exception as e:
+                print('Error writing to logfile: %s' % (e))
+
+    @staticmethod
     def cli_log():
         """
-        Logs an instance of playing a track.  Static entry for commandline use.
+        Logs an instance of playing one or more tracks.  Static entry for commandline use.
         """
 
         # First up, log what we're doing.
@@ -582,12 +657,21 @@ class App(object):
         # Now do our stuff:
         try:
             # Parse arguments
-            parser = AppArgumentParser(description='Logs a track being played')
+            parser = AppArgumentParser(
+                description='Logs one or more tracks being played.',
+                epilog="""For the timestamp argument, many human-readable relative dates
+                    are supported, such as "2 hours ago."  Anything accepted by the
+                    parsedatetime module should be fine.  Note that when logging multiple
+                    tracks at the same time and using the --time option, it will be
+                    possible to end up with dates in the future if the specified time
+                    was not far enough in the past.""",
+            )
 
-            parser.add_argument('-f', '--filename',
+            parser.add_argument('filenames',
                 type=str,
-                required=True,
-                help='Filename to log')
+                nargs='+',
+                metavar='filename',
+                help='Filename(s) to log')
 
             parser.add_argument('-s', '--source',
                 choices=['xmms', 'car', 'stereo', 'cafe'],
@@ -596,19 +680,18 @@ class App(object):
 
             parser.add_argument('-t', '--time',
                 type=str,
-                help="""Timestamp to use for the injection.  Defaults to the current time.
-                    Should be parseable by the parsedatetime module; many human-readable
-                    relative dates ("2 hours ago") should work fine.""")
+                help="""Timestamp to use for the injection.  For a single track,
+                    defaults to the current time.  For multiple tracks, will default
+                    to the current time minus the total length of the tracks.""")
 
             args = parser.parse_args()
 
             # Do the work
             app = App(args.database)
-            track = app.log_track(args.filename, source=args.source, timestamp=args.time)
-            result_str = 'Track logged with ID %d: %s / %s (album %d) - %s' % (
-                track.pk, track.artist, track.album, track.album_id, track.title)
-            App.result_log(result_str)
-            print(result_str)
+            (tracks, statuses) = app.log_filenames(args.filenames, source=args.source, timestamp=args.time)
+            App.result_logs(statuses)
+            for status in statuses:
+                print(status)
             app.close()
 
         except Exception as e:
