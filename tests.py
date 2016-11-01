@@ -82,7 +82,7 @@ class DatabaseTest(unittest.TestCase):
         self.app.curs.execute('select * from track where id=%s', (track_id,))
         if self.app.curs.rowcount == 1:
             return self.app.curs.fetchone()
-        else:
+        else:   # pragma: no cover
             return None
 
 class TransformTests(unittest.TestCase):
