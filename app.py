@@ -319,8 +319,9 @@ class AppArgumentParser(argparse.ArgumentParser):
 
     def __init__(self, *args, **kwargs):
 
-        super(AppArgumentParser, self).__init__(*args, **kwargs,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        super(AppArgumentParser, self).__init__(*args,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            **kwargs)
 
         self.add_argument('-d', '--database',
             type=str,
