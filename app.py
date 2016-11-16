@@ -656,6 +656,12 @@ class App(object):
         # which would otherwise only throw warnings
         self.curs.execute('SET @@sql_mode:=TRADITIONAL')
 
+        # Initialize an empty cache of artist/album-to-albumid mappings.  This cache
+        # could theoretically be more trouble than it's worth if this was ever a long-
+        # running process, but since everything here is intended to be a real quick
+        # one-time-shot thing, it should be fine, and possibly save us some SQL.
+        self.album_map = {}
+
         # Get our transforms
         if load_data:
             self.load_data()
@@ -675,13 +681,20 @@ class App(object):
         be found.
         """
 
+        # First check to see if this is in our cache already
+        albumkey = '%s / %s' % (track.artist, track.album)
+        if albumkey in self.album_map:
+            track.album_id = self.album_map[albumkey]
+            return track.album_id
+
         # Try a specific album by the artist
         self.curs.execute('select alid from album where alartist=%s and alalbum=%s limit 1',
             (track.artist, track.album))
         if self.curs.rowcount == 1:
             row = self.curs.fetchone()
             track.album_id = row['alid']
-            return row['alid']
+            self.album_map[albumkey] = track.album_id
+            return track.album_id
         
         # Try for Various-Artists albums
         self.curs.execute('select alid from album where alartist=%s and alalbum=%s limit 1',
@@ -689,10 +702,12 @@ class App(object):
         if self.curs.rowcount == 1:
             row = self.curs.fetchone()
             track.album_id = row['alid']
-            return row['alid']
+            self.album_map[albumkey] = track.album_id
+            return track.album_id
 
         # Fall back to 0
         track.album_id = 0
+        self.album_map[albumkey] = 0
         return 0
 
     def close(self):
