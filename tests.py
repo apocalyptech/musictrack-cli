@@ -10,7 +10,7 @@ import tempfile
 
 from mutagen import id3
 
-from app import App, Album, Track, Transform, TransformList
+from app import App, AppArgumentParser, Album, Track, Transform, TransformList
 
 class DatabaseTest(unittest.TestCase):
     """
@@ -2954,6 +2954,28 @@ class AddAlbumTests(DatabaseTest):
         self.assertEqual(added, False)
         self.assertIn('Would update to', status)
         self.assertEqual(self.get_album_count(), 1)
+
+    def test_adding_invalid_file(self):
+        """
+        Tests adding a file which isn't actually a music file.
+        """
+        (added, status) = self.app.add_album(__file__)
+        self.assertEqual(added, False)
+        self.assertIn('Unable to load', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+class AppArgumentParserTests(unittest.TestCase):
+    """
+    Tests of our AppArgumentParser.  Honestly this is only here just so
+    coverage.py reports 100% without having to exclude it.
+    """
+
+    def test_instantiation(self):
+        """
+        Just make sure it works.
+        """
+        parser = AppArgumentParser(description='test')
+        self.assertNotEqual(parser, None)
 
 if __name__ == '__main__':
 
