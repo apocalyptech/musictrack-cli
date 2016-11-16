@@ -3,8 +3,12 @@
 
 import os
 import uuid
+import shutil
 import unittest
 import datetime
+import tempfile
+
+from mutagen import id3
 
 from app import App, Album, Track, Transform, TransformList
 
@@ -2665,6 +2669,291 @@ class ApplyTransformsTests(DatabaseTest):
         row = self.get_track_by_id(pk_second)
         self.assertEqual(row['lasttransform'], tf_pk)
         self.assertEqual(row['artist'], 'Artist 2')
+
+class AddAlbumTests(DatabaseTest):
+    """
+    Tests for dealing with adding a new album to the DB.  This is only ever
+    done via reading in groups of files, so we have some extra work to do
+    in setUp and tearDown.
+    """
+
+    def setUp(self):
+        super(AddAlbumTests, self).setUp()
+        self.mp3_dir = tempfile.mkdtemp()
+        self.source_file = os.path.join(os.path.dirname(__file__), 'testdata',
+            'silence.mp3')
+        self.filenames = []
+
+    def tearDown(self):
+        super(AddAlbumTests, self).tearDown()
+        shutil.rmtree(self.mp3_dir)
+
+    def add_mp3(self, filename='song.mp3', set_artist=False, artist=None,
+            set_album=False, album=None):
+        """
+        Adds an mp3 to our temporary mp3 dir, based on ``testdata/silence.mp3``.
+        Returns the full path to the mp3.  If ``set_artist`` or ``set_album``
+        are ``True``, mutagen will be used to alter the mp3 tags after
+        copying.  If ``artist`` or ``album`` are ``None`` in this case, it
+        will remove those tags entirely.
+
+        Will also add the path to ``self.filenames``, which can then be used
+        to pass into ``App.add_album()``.
+        """
+        full_filename = os.path.join(self.mp3_dir, filename)
+        shutil.copyfile(self.source_file, full_filename)
+        self.assertEqual(os.path.exists(full_filename), True)
+
+        if set_artist or set_album:
+            tags = id3.ID3(full_filename)
+
+            if set_artist:
+                tags.delall('TPE1')
+                if artist is not None:
+                    tags.add(id3.TPE1(encoding=3, text=artist))
+            
+            if set_album:
+                tags.delall('TALB')
+                if album is not None:
+                    tags.add(id3.TALB(encoding=3, text=album))
+
+            tags.save()
+
+        self.filenames.append(full_filename)
+        return full_filename
+
+    def test_no_tracks(self):
+        """
+        Tests adding when there are no tracks.
+        """
+        (added, status) = self.app.add_album([])
+        self.assertEqual(added, False)
+        self.assertIn('No files', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_single_track(self):
+        """
+        Tests adding a single-track album
+        """
+        self.add_mp3()
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+        album = Album.get_by_artist_album(self.app.curs, 'Artist', 'Album')
+        self.assertNotEqual(album, None)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'album')
+        self.assertEqual(album.totalseconds, 2)
+        self.assertEqual(album.totaltracks, 1)
+
+    def test_single_track_ep(self):
+        """
+        Tests adding a single-track album as an EP
+        """
+        self.add_mp3()
+        (added, status) = self.app.add_album(self.filenames, 'ep')
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+        album = Album.get_by_artist_album(self.app.curs, 'Artist', 'Album')
+        self.assertNotEqual(album, None)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'ep')
+        self.assertEqual(album.totalseconds, 2)
+        self.assertEqual(album.totaltracks, 1)
+
+    def test_single_track_no_artist(self):
+        """
+        Tests adding a single-track album but without an artist tag (should fail)
+        """
+        self.add_mp3(set_artist=True)
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('has no artist tag', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_single_track_blank_artist(self):
+        """
+        Tests adding a single-track album but without a blank artist tag (should fail)
+        """
+        self.add_mp3(set_artist=True, artist='')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('has no artist tag', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_single_track_no_album(self):
+        """
+        Tests adding a single-track album but without an album tag (should fail)
+        """
+        self.add_mp3(set_album=True)
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('has no album tag', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_single_track_blank_album(self):
+        """
+        Tests adding a single-track album but without a blank album tag (should fail)
+        """
+        self.add_mp3(set_album=True, album='')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('has no album tag', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_two_tracks_same_album(self):
+        """
+        Tests adding a two-track album
+        """
+        self.add_mp3(filename='1.mp3')
+        self.add_mp3(filename='2.mp3')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+        album = Album.get_by_artist_album(self.app.curs, 'Artist', 'Album')
+        self.assertNotEqual(album, None)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'album')
+        self.assertEqual(album.totalseconds, 4)
+        self.assertEqual(album.totaltracks, 2)
+
+    def test_two_tracks_various_artists(self):
+        """
+        Tests adding a two-track various artists album
+        """
+        self.add_mp3(filename='1.mp3')
+        self.add_mp3(filename='2.mp3', set_artist=True, artist='Artist 2')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+        album = Album.get_by_artist_album(self.app.curs, 'Various', 'Album')
+        self.assertNotEqual(album, None)
+        self.assertEqual(album.artist, 'Various')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'album')
+        self.assertEqual(album.totalseconds, 4)
+        self.assertEqual(album.totaltracks, 2)
+
+    def test_two_tracks_mismatched_album(self):
+        """
+        Tests trying to add two tracks which don't share an album name.  Should
+        fail.
+        """
+        self.add_mp3(filename='1.mp3')
+        self.add_mp3(filename='2.mp3', set_album=True, album='Album 2')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('changed to', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_single_track_artist_too_long(self):
+        """
+        Tests adding a file with an artist name that's too long.
+        """
+        self.add_mp3(set_artist=True, artist='z'*(App.max_artist_album_length+10))
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('is longer than', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_single_track_album_too_long(self):
+        """
+        Tests adding a file with an album name that's too long.
+        """
+        self.add_mp3(set_album=True, album='z'*(App.max_artist_album_length+10))
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('is longer than', status)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_adding_album_twice(self):
+        """
+        Tests adding the same album twice (should fail if we don't specify
+        force_update).  Will add a second track and a different album type,
+        just for comparison's sake.
+        """
+        self.add_mp3(filename='1.mp3')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+
+        self.add_mp3(filename='2.mp3')
+        (added, status) = self.app.add_album(self.filenames, 'ep')
+        self.assertEqual(added, False)
+        self.assertIn('Would update to', status)
+        self.assertEqual(self.get_album_count(), 1)
+
+        album = Album.get_by_artist_album(self.app.curs, 'Artist', 'Album')
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'album')
+        self.assertEqual(album.totalseconds, 2)
+        self.assertEqual(album.totaltracks, 1)
+
+    def test_adding_album_twice_forced(self):
+        """
+        Tests adding the same album twice, forcing the update.  Will add
+        a second track so that we can check for updated variables.
+        """
+        self.add_mp3(filename='1.mp3')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+
+        self.add_mp3(filename='2.mp3')
+        (added, status) = self.app.add_album(self.filenames, 'ep', force_update=True)
+        self.assertEqual(added, True)
+        self.assertIn('Updated to', status)
+        self.assertEqual(self.get_album_count(), 1)
+
+        album = Album.get_by_artist_album(self.app.curs, 'Artist', 'Album')
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'ep')
+        self.assertEqual(album.totalseconds, 4)
+        self.assertEqual(album.totaltracks, 2)
+
+    def test_single_track_with_transform(self):
+        """
+        Tests adding a single-track album, when a transform is in place.
+        """
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        self.app.load_data()
+
+        self.add_mp3()
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+        album = Album.get_by_artist_album(self.app.curs, 'Artist 2', 'Album')
+        self.assertNotEqual(album, None)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'album')
+        self.assertEqual(album.totalseconds, 2)
+        self.assertEqual(album.totaltracks, 1)
+        self.assertEqual(album.last_transform, tf_pk)
+
+    def test_adding_existing_album_with_dependant_transform(self):
+        """
+        Tests adding an album when we already have the same album in the
+        database, though the matching album will ONLY be matched if transforms
+        are applied at the correct spot.
+        """
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        album_id = self.add_album(artist='Artist 2', album='Album')
+        self.app.load_data()
+        self.assertEqual(self.get_album_count(), 1)
+
+        self.add_mp3()
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, False)
+        self.assertIn('Would update to', status)
+        self.assertEqual(self.get_album_count(), 1)
 
 if __name__ == '__main__':
 

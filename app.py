@@ -493,7 +493,14 @@ class Album(object):
         """
         Returns a str which identifies ourself for logging purposes
         """
-        return 'ID %d: %s / %s' % (self.pk, self.artist, self.album)
+        return 'ID %d: %s / %s (%s)' % (self.pk, self.artist, self.album, self.album_type)
+
+    def full_str(self):
+        """
+        A string representation which includes our track and seconds counts.
+        """
+        return '%s - %d tracks, %d secs (%0.1fmin)' % (self, self.totaltracks,
+            self.totalseconds, self.totalseconds/60)
 
     @staticmethod
     def from_database_row(row):
@@ -519,6 +526,25 @@ class Album(object):
             albums.append(Album.from_database_row(row))
         return albums
 
+    @staticmethod
+    def get_by_artist_album(curs, artist, album):
+        """
+        Returns an Album object from the database which matches the passed-in
+        ``artist`` and ``album``, or ``None``.
+        """
+        curs.execute('select * from album where alartist=%s and alalbum=%s', (artist, album))
+        if curs.rowcount == 0:
+            return None
+        elif curs.rowcount == 1:
+            return Album.from_database_row(curs.fetchone())
+        else:   # pragma: no cover
+            # We shouldn't be able to get here because artist/album is a unique index
+            # in the database.  Clear out the cursor just in case we catch the exception
+            # and want to use the cursor some more (it'll complain if the last query
+            # isn't flushed out)
+            curs.fetchall()
+            raise Exception('Found more than one album when looking up by artist and album')
+
 class AppArgumentParser(argparse.ArgumentParser):
     """
     Custom argument parser which always supports the --database flag
@@ -543,6 +569,8 @@ class App(object):
     """
 
     default_database = 'db.ini'
+
+    max_artist_album_length = 90
 
     schema_track_drop = 'drop table if exists track'
     schema_track_truncate = 'truncate track'
@@ -859,6 +887,94 @@ class App(object):
         # Commit!
         self.db.commit()
 
+    def add_album(self, filenames, album_type='album', force_update=False):
+        """
+        Adds an album to the database, given a list of filenames and an album type.
+        Will return True if the album was added, and False otherwise.  Will return
+        a tuple containing a boolean (True if the album was inserted, False if not)
+        and a string to be passed back to the user.
+
+        If ``force_update`` is passed in as ``True``, an existing album record
+        matching the Album/Artist will be updated with the new information (track
+        count, total time).
+        """
+
+        tracks = []
+        album_artist = None
+        album_album = None
+        totalseconds = 0
+
+        # Make sure we have the data we need
+        if len(filenames) == 0:
+            return (False, 'No files specified')
+
+        # Load all the tracks into Track objects.  Also verify some information
+        # as we go.
+        for filename in filenames:
+            try:
+                track = Track.from_filename(filename)
+                if not track.artist or track.artist == '':
+                    return (False, 'File "%s" has no artist tag' % (filename))
+                if not track.album or track.album == '':
+                    return (False, 'File "%s" has no album tag' % (filename))
+                if album_artist is None:
+                    album_artist = track.artist
+                    album_album = track.album
+                else:
+                    if album_album != track.album:
+                        return (False, 'First album name seen is "%s" but %s changed to "%s"' % (
+                            album_album, filename, track.album))
+                    if album_artist != track.artist:
+                        album_artist = 'Various'
+                totalseconds += track.seconds
+                tracks.append(track)
+            except Exception as e:
+                return (False, 'Unable to load "%s": %s' % (filename, e))
+
+        # Our database has a maximum field size.  Abort rather than truncate.
+        if len(album_artist) > App.max_artist_album_length:
+            return (False, 'Album artist "%s" is longer than %d characters, aborting.' % (
+                album_artist, App.max_artist_album_length))
+        if len(album_album) > App.max_artist_album_length:
+            return (False, 'Album name "%s" is longer than %d characters, aborting.' % (
+                album_album, App.max_artist_album_length))
+
+        # Create an album object.  This may be premature, but this way we can apply transforms
+        # before comparing versus the DB.
+        album = Album(artist=album_artist, album=album_album, album_type=album_type,
+            totalseconds=totalseconds, totaltracks=len(tracks))
+
+        # Apply transforms
+        self.transforms.apply_album(album)
+
+        # See if we have an existing album already.
+        existing_album = Album.get_by_artist_album(self.curs, album.artist, album.album)
+        if existing_album is None:
+
+            # Do the insert
+            album.insert(self.db, self.curs)
+            return (True, 'Album inserted: %s' % (album.full_str()))
+
+        else:
+
+            # We have an existing album - if we're supposed to update, do so.
+            # Otherwise, just report back to the user.
+            return_arr = []
+            return_val = False
+            return_arr.append('Found existing album: %s' % (existing_album.full_str()))
+            existing_album.totalseconds = album.totalseconds
+            existing_album.totaltracks = album.totaltracks
+            existing_album.album_type = album.album_type
+            if force_update:
+                existing_album.update(self.db, self.curs)
+                return_arr.append('Updated to: %s' % (existing_album.full_str()))
+                return_val = True
+            else:
+                return_arr.append('Would update to: %s' % (existing_album.full_str()))
+                return_arr.append('Use --force to perform the update')
+
+            return (return_val, "\n".join(return_arr))
+
     @staticmethod
     def activity_log():
         """
@@ -975,4 +1091,49 @@ class App(object):
         app = App(args.database)
         for line in app.apply_transforms():
             print(line)
+        app.close()
+
+    @staticmethod
+    def cli_albumadd():
+        """
+        Adds a new album to the database, given a collection of files.
+        """
+
+        # Parse arguments
+        parser = AppArgumentParser(description='Adds a new album to the database')
+
+        group = parser.add_mutually_exclusive_group()
+
+        group.add_argument('-l', '--live',
+            action='store_true',
+            help='Store as a live album')
+
+        group.add_argument('-e', '--ep',
+            action='store_true',
+            help='Store as an EP')
+
+        parser.add_argument('-f', '--force',
+            action='store_true',
+            help='Force an update, if the album already exists')
+
+        parser.add_argument('filenames',
+            type=str,
+            nargs='+',
+            metavar='filename',
+            help='Filenames which make up the album')
+
+        args = parser.parse_args()
+
+        # Collapse our album type down a bit
+        if args.live:
+            album_type = 'live'
+        elif args.ep:
+            album_type = 'ep'
+        else:
+            album_type = 'album'
+
+        # Do the work
+        app = App(args.database)
+        (added, status) = app.add_album(args.filenames, album_type, force_update=args.force)
+        print(status)
         app.close()
