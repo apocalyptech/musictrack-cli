@@ -6,7 +6,7 @@ import uuid
 import unittest
 import datetime
 
-from app import App, Track, Transform, TransformList
+from app import App, Album, Track, Transform, TransformList
 
 class DatabaseTest(unittest.TestCase):
     """
@@ -64,6 +64,17 @@ class DatabaseTest(unittest.TestCase):
             self.app.db.commit()
         return self.app.curs.lastrowid
 
+    def get_album_count(self):
+        """
+        Gets a count of albums in our database
+        """
+        self.app.curs.execute('select count(*) c from album')
+        if self.app.curs.rowcount == 1:
+            row = self.app.curs.fetchone()
+            return row['c']
+        else:   # pragma: no cover
+            return 0
+
     def get_track_count(self):
         """
         Gets a count of tracks in our database
@@ -74,6 +85,16 @@ class DatabaseTest(unittest.TestCase):
             return row['c']
         else:   # pragma: no cover
             return 0
+
+    def get_album_by_id(self, album_id):
+        """
+        Gets an album by album ID.  Returns the row.
+        """
+        self.app.curs.execute('select * from album where alid=%s', (album_id,))
+        if self.app.curs.rowcount == 1:
+            return self.app.curs.fetchone()
+        else:   # pragma: no cover
+            return None
 
     def get_track_by_id(self, track_id):
         """
@@ -191,7 +212,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_album_based_on_artist_album_match(self):
+    def test_transform_track_album_based_on_artist_album_match(self):
         """
         Given a track, transform its album based on matching both the artist and album.
         Will match the tested track.
@@ -211,7 +232,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_album_based_on_artist_album_no_match_album(self):
+    def test_transform_track_album_based_on_artist_album_no_match_album(self):
         """
         Given a track, transform its album based on matching both the artist and album.
         Will NOT match the tested track, based on an incorrect album.
@@ -231,7 +252,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_album_based_on_artist_album_no_match_artist(self):
+    def test_transform_track_album_based_on_artist_album_no_match_artist(self):
         """
         Given a track, transform its album based on matching both the artist and album.
         Will NOT match the tested track, based on an incorrect artist.
@@ -251,7 +272,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_artist_based_on_artist_album_match(self):
+    def test_transform_track_artist_based_on_artist_album_match(self):
         """
         Given a track, transform its artist based on matching both the artist and album.
         Will match the tested track.
@@ -271,7 +292,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_artist_based_on_artist_album_no_match_album(self):
+    def test_transform_track_artist_based_on_artist_album_no_match_album(self):
         """
         Given a track, transform its artist based on matching both the artist and album.
         Will NOT match the tested track, based on an incorrect album.
@@ -291,7 +312,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_artist_based_on_artist_album_no_match_artist(self):
+    def test_transform_track_artist_based_on_artist_album_no_match_artist(self):
         """
         Given a track, transform its artist based on matching both the artist and album.
         Will NOT match the tested track, based on an incorrect artist.
@@ -311,7 +332,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_title_based_on_artist_title_match(self):
+    def test_transform_track_title_based_on_artist_title_match(self):
         """
         Given a track, transform its title based on matching both the artist and title.
         Will match the tested track.
@@ -331,7 +352,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_title_based_on_artist_title_no_match_title(self):
+    def test_transform_track_title_based_on_artist_title_no_match_title(self):
         """
         Given a track, transform its title based on matching both the artist and title.
         Will NOT match the tested track, based on an incorrect title.
@@ -351,7 +372,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 3')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_title_based_on_artist_title_no_match_artist(self):
+    def test_transform_track_title_based_on_artist_title_no_match_artist(self):
         """
         Given a track, transform its title based on matching both the artist and title.
         Will NOT match the tested track, based on an incorrect artist.
@@ -371,7 +392,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_artist_based_on_artist_title_match(self):
+    def test_transform_track_artist_based_on_artist_title_match(self):
         """
         Given a track, transform its artist based on matching both the artist and title.
         Will match the tested track.
@@ -391,7 +412,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_artist_based_on_artist_title_no_match_title(self):
+    def test_transform_track_artist_based_on_artist_title_no_match_title(self):
         """
         Given a track, transform its artist based on matching both the artist and title.
         Will NOT match the tested track, based on an incorrect title.
@@ -411,7 +432,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_artist_based_on_artist_title_no_match_artist(self):
+    def test_transform_track_artist_based_on_artist_title_no_match_artist(self):
         """
         Given a track, transform its artist based on matching both the artist and title.
         Will NOT match the tested track, based on an incorrect artist.
@@ -431,7 +452,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_album_based_on_album_title_match(self):
+    def test_transform_track_album_based_on_album_title_match(self):
         """
         Given a track, transform its album based on matching both the album and title.
         Will match the tested track.
@@ -451,7 +472,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_album_based_on_album_title_no_match_title(self):
+    def test_transform_track_album_based_on_album_title_no_match_title(self):
         """
         Given a track, transform its album based on matching both the album and title.
         Will NOT match the tested track, based on an incorrect title.
@@ -471,7 +492,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_album_based_on_album_title_no_match_album(self):
+    def test_transform_track_album_based_on_album_title_no_match_album(self):
         """
         Given a track, transform its album based on matching both the album and title.
         Will NOT match the tested track, based on an incorrect album.
@@ -491,7 +512,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_title_based_on_album_title_match(self):
+    def test_transform_track_title_based_on_album_title_match(self):
         """
         Given a track, transform its title based on matching both the album and title.
         Will match the tested track.
@@ -511,7 +532,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_title_based_on_album_title_no_match_title(self):
+    def test_transform_track_title_based_on_album_title_no_match_title(self):
         """
         Given a track, transform its title based on matching both the album and title.
         Will NOT match the tested track, based on an incorrect title.
@@ -531,7 +552,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 3')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_title_based_on_album_title_no_match_album(self):
+    def test_transform_track_title_based_on_album_title_no_match_album(self):
         """
         Given a track, transform its title based on matching both the album and title.
         Will NOT match the tested track, based on an incorrect album.
@@ -551,7 +572,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_title_based_on_artist_album_match(self):
+    def test_transform_track_title_based_on_artist_album_match(self):
         """
         Given a track, transform its title based on matching both the artist and album.
         Will match the tested track.
@@ -571,7 +592,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
     
-    def test_transform_title_based_on_artist_album_no_match_artist(self):
+    def test_transform_track_title_based_on_artist_album_no_match_artist(self):
         """
         Given a track, transform its title based on matching both the artist and album.
         Will NOT match the tested track, based on an incorrect artist.
@@ -591,7 +612,7 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
     
-    def test_transform_title_based_on_artist_album_no_match_album(self):
+    def test_transform_track_title_based_on_artist_album_no_match_album(self):
         """
         Given a track, transform its title based on matching both the artist and album.
         Will NOT match the tested track, based on an incorrect album.
@@ -610,6 +631,245 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.album, 'Album 2')
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
+    
+    def test_transform_album_no_changes(self):
+        """
+        Given an album, apply a transformation which does nothing
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1, cond_artist=True, change_artist=True,
+            pattern_artist='Foo', to_artist='Bar')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_empty_transform(self):
+        """
+        Given an album, apply a transformation which will never match on
+        anything.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            change_artist=True, pattern_artist='Artist', to_artist='Artist 2',
+            change_album=True, pattern_album='Album', to_album='Album 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_titlecond_specified(self):
+        """
+        Given an album, apply a transformation which has a condition on the
+        title (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            cond_title=True,
+            pattern_title='Title')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_titlechange_specified(self):
+        """
+        Given an album, apply a transformation which has a change on the
+        title (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            change_title=True,
+            to_title='Title 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_change_artist(self):
+        """
+        Given an album, apply a transformation which changes the artist
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1, cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.transformed, True)
+    
+    def test_transform_album_change_album(self):
+        """
+        Given an album, apply a transformation which changes the album
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1, cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+    
+    def test_transform_album_full_transform(self):
+        """
+        Given an album, apply a transformation which matches on all fields.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True, pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True, pattern_album='Album', to_album='Album 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+    
+    def test_transform_album_album_based_on_artist_album_match(self):
+        """
+        Given an album, transform its album based on matching both the artist and album.
+        Will match the tested album.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+    
+    def test_transform_album_album_based_on_artist_album_no_match_album(self):
+        """
+        Given an album, transform its album based on matching both the artist and album.
+        Will NOT match the tested track, based on an incorrect album.
+        """
+        album = Album(artist='Artist', album='Album 3',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album 3')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_album_based_on_artist_album_no_match_artist(self):
+        """
+        Given an album, transform its album based on matching both the artist and album.
+        Will NOT match the tested track, based on an incorrect artist.
+        """
+        album = Album(artist='Artist 2', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_artist_based_on_artist_album_match(self):
+        """
+        Given an album, transform its artist based on matching both the artist and album.
+        Will match the tested album.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist = 'Artist',
+            cond_album=True, pattern_album='Album',
+            change_artist=True, to_artist='Artist 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, True)
+    
+    def test_transform_album_artist_based_on_artist_album_no_match_album(self):
+        """
+        Given an album, transform its artist based on matching both the artist and album.
+        Will NOT match the tested track, based on an incorrect album.
+        """
+        album = Album(artist='Artist', album='Album 2',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist = 'Artist',
+            cond_album=True, pattern_album='Album',
+            change_artist=True, to_artist='Artist 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_artist_based_on_artist_album_no_match_artist(self):
+        """
+        Given an album, transform its artist based on matching both the artist and album.
+        Will NOT match the tested track, based on an incorrect artist.
+        """
+        album = Album(artist='Artist 3', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist = 'Artist',
+            cond_album=True, pattern_album='Album',
+            change_artist=True, to_artist='Artist 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist 3')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
 
 class TransformListTests(unittest.TestCase):
     """
@@ -672,7 +932,219 @@ class TransformListTests(unittest.TestCase):
         """
         self.assertEqual(TransformList.int_to_bool({'varname': 0}, 'varname'), False)
 
-    def test_transform_with_single_transform(self):
+    def test_transform_album_with_single_transform(self):
+        """
+        Transforms an album with a single transform in the database
+        """
+        album = Album(artist='Artist', album='Album')
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.transformed, True)
+
+    def test_transform_album_with_single_transform_high_id(self):
+        """
+        Transforms an album with a single transform in the database, with
+        a high ID in the database.
+        """
+        album = Album(artist='Artist', album='Album')
+        tflist = TransformList()
+        tflist.add_transform(Transform(100,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 100)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.transformed, True)
+
+    def test_transform_album_with_two_transforms(self):
+        """
+        Transforms an album with a two transforms in the database
+        """
+        album = Album(artist='Artist', album='Album')
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+        tflist.add_transform(Transform(2,
+            cond_album=True, pattern_album='Album',
+            change_album=True, to_album='Album 2',
+        ))
+
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 2)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+
+    def test_transform_album_with_two_transforms_with_gap_in_numbering(self):
+        """
+        Transforms an album with a two transforms in the database, when
+        there's a gap in the numbering
+        """
+        album = Album(artist='Artist', album='Album')
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+        tflist.add_transform(Transform(3,
+            cond_album=True, pattern_album='Album',
+            change_album=True, to_album='Album 2',
+        ))
+
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 3)
+        self.assertEqual(album.artist, 'Artist 2')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+
+    def test_transform_album_with_two_transforms_with_gap_in_numbering_and_one_already_applied(self):
+        """
+        Transforms an album with a two transforms in the database, when
+        there's a gap in the numbering, and the earlier transform has
+        already been applied.
+        """
+        album = Album(artist='Artist', album='Album', last_transform=2)
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+        tflist.add_transform(Transform(3,
+            cond_album=True, pattern_album='Album',
+            change_album=True, to_album='Album 2',
+        ))
+
+        self.assertEqual(album.last_transform, 2)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 3)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+
+    def test_transform_album_with_two_transforms_undo(self):
+        """
+        Transforms an album with a two transforms in the database, which
+        undo each other.  Technically we should probably have something
+        smart enough to find out if the end result has changed, but in
+        the interests of laziness we'll just cope with possibly having
+        superfluous database calls.
+        """
+        album = Album(artist='Artist', album='Album')
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+        tflist.add_transform(Transform(2,
+            cond_artist=True, pattern_artist='Artist 2',
+            change_artist=True, to_artist='Artist',
+        ))
+
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 2)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, True)
+
+    def test_no_transform_album_with_already_applied_transform(self):
+        """
+        Sets up an album to have already been processed by a transform.
+        Ensure that it is not processed again.  (Note that the actual
+        data in the track would indicate that the transform hasn't been
+        applied, but that's just to make testing easier.)
+        """
+        album = Album(artist='Artist', album='Album', last_transform=1)
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.transformed, False)
+
+    def test_two_transforms_album_with_one_already_applied(self):
+        """
+        Transforms an album with a two transforms in the database, where
+        the first one has already been applied.  (Note that the actual
+        data in the track would indicate that the transform hasn't been
+        applied, but that's just to make testing easier.)
+        """
+        album = Album(artist='Artist', album='Album', last_transform=1)
+        tflist = TransformList()
+        tflist.add_transform(Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2',
+        ))
+        tflist.add_transform(Transform(2,
+            cond_album=True, pattern_album='Album',
+            change_album=True, to_album='Album 2',
+        ))
+
+        self.assertEqual(album.last_transform, 1)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+
+        tflist.apply_album(album)
+
+        self.assertEqual(album.last_transform, 2)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album 2')
+        self.assertEqual(album.transformed, True)
+
+    def test_transform_track_with_single_transform(self):
         """
         Transforms a track with a single transform in the database
         """
@@ -693,7 +1165,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist 2')
         self.assertEqual(track.transformed, True)
 
-    def test_transform_with_single_transform_high_id(self):
+    def test_transform_track_with_single_transform_high_id(self):
         """
         Transforms a track with a single transform in the database, with
         a high ID in the database.
@@ -715,7 +1187,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist 2')
         self.assertEqual(track.transformed, True)
 
-    def test_transform_with_two_transforms(self):
+    def test_transform_track_with_two_transforms(self):
         """
         Transforms a track with a two transforms in the database
         """
@@ -742,7 +1214,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
 
-    def test_transform_with_two_transforms_with_gap_in_numbering(self):
+    def test_transform_track_with_two_transforms_with_gap_in_numbering(self):
         """
         Transforms a track with a two transforms in the database, when
         there's a gap in the numbering
@@ -770,7 +1242,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
 
-    def test_transform_with_two_transforms_with_gap_in_numbering_and_one_already_applied(self):
+    def test_transform_track_with_two_transforms_with_gap_in_numbering_and_one_already_applied(self):
         """
         Transforms a track with a two transforms in the database, when
         there's a gap in the numbering, and the earlier transform has
@@ -800,7 +1272,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
 
-    def test_transform_with_two_transforms_undo(self):
+    def test_transform_track_with_two_transforms_undo(self):
         """
         Transforms a track with a two transforms in the database, which
         undo each other.  Technically we should probably have something
@@ -831,7 +1303,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, True)
 
-    def test_no_transform_with_already_applied_transform(self):
+    def test_no_transform_track_with_already_applied_transform(self):
         """
         Sets up a track to have already been processed by a transform.
         Ensure that it is not processed again.  (Note that the actual
@@ -856,7 +1328,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.transformed, False)
 
-    def test_no_transform_with_song_with_transform_id_greater(self):
+    def test_no_transform_track_with_song_with_transform_id_greater(self):
         """
         Sets up a track to have already been processed by a transform.
         Ensure that it is not processed again.  (Note that the actual
@@ -881,7 +1353,7 @@ class TransformListTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.transformed, False)
 
-    def test_two_transforms_with_one_already_applied(self):
+    def test_two_transforms_track_with_one_already_applied(self):
         """
         Transforms a track with a two transforms in the database, where
         the first one has already been applied.  (Note that the actual
@@ -992,6 +1464,27 @@ class TransformListDatabaseTests(DatabaseTest):
         self.assertEqual(transform.to_album, 'Album 2')
         self.assertEqual(transform.to_title, 'Title 2')
 
+class AlbumTests(unittest.TestCase):
+    """
+    Tests for our Album class
+    """
+
+    def test_ensure_data_no_totaltracks(self):
+        """
+        Tests our function to ensure that we have totaltracks
+        """
+        album = Album(artist='Artist', album='Album', totalseconds=120)
+        with self.assertRaises(Exception):
+            album.ensure_data()
+
+    def test_ensure_data_no_totalseconds(self):
+        """
+        Tests our function to ensure that we have totalseconds
+        """
+        album = Album(artist='Artist', album='Album', totaltracks=2)
+        with self.assertRaises(Exception):
+            album.ensure_data()
+
 class TrackTests(unittest.TestCase):
     """
     Tests for our Track class
@@ -1079,6 +1572,271 @@ class TrackTests(unittest.TestCase):
 
         with self.assertRaises(Exception):
             track = Track.from_filename(filename)
+
+class AlbumDatabaseTests(DatabaseTest):
+    """
+    Tests of our Album object which require a database.
+    """
+
+    def test_insert_simple(self):
+        """
+        Tests a simple album insert
+        """
+        album = Album(artist='Artist', album='Album', album_type='ep',
+            totaltracks=5, totalseconds=42, last_transform=3)
+        pk = album.insert(self.app.db, self.app.curs)
+
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist')
+        self.assertEqual(album_row['alalbum'], 'Album')
+        self.assertEqual(album_row['altype'], 'ep')
+        self.assertEqual(album_row['totaltracks'], 5)
+        self.assertEqual(album_row['totalseconds'], 42)
+        self.assertEqual(album_row['lasttransform'], 3)
+
+    def test_insert_minimal(self):
+        """
+        Tests a minimal album insert
+        """
+        album = Album(artist='Artist', album='Album',
+            totalseconds=120, totaltracks=2)
+        pk = album.insert(self.app.db, self.app.curs)
+
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist')
+        self.assertEqual(album_row['alalbum'], 'Album')
+        self.assertEqual(album_row['altype'], 'album')
+        self.assertEqual(album_row['totaltracks'], 2)
+        self.assertEqual(album_row['totalseconds'], 120)
+        self.assertEqual(album_row['lasttransform'], 0)
+
+    def test_insert_invalid_type(self):
+        """
+        Tests an album insert with an invalid type.
+        """
+        album = Album(artist='Artist', album='Album', album_type='xyzzy',
+            totalseconds=120, totaltracks=2)
+        with self.assertRaises(Exception):
+            pk = album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_insert_empty_totalseconds(self):
+        """
+        Tests an album insert with no Total Seconds
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=2)
+        with self.assertRaises(Exception):
+            pk = album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_insert_empty_totaltracks(self):
+        """
+        Tests an album insert with no Total Tracks
+        """
+        album = Album(artist='Artist', album='Album',
+            totalseconds=120)
+        with self.assertRaises(Exception):
+            pk = album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_insert_no_commit(self):
+        """
+        Tests an insert where we do not commit the transaction.
+        """
+        album = Album(artist='Artist', album='Album',
+            totalseconds=120, totaltracks=1)
+        pk = album.insert(self.app.db, self.app.curs, commit=False)
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist')
+        self.assertEqual(album_row['alalbum'], 'Album')
+        self.app.db.rollback()
+        self.assertEqual(self.get_album_by_id(pk), None)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_insert_duplicate(self):
+        """
+        Tests a duplicate album insert - should raise an exception
+        """
+        album = Album(artist='Artist', album='Album',
+            totalseconds=120, totaltracks=2)
+        album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 1)
+
+        with self.assertRaises(Exception):
+            album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 1)
+
+    def test_update(self):
+        """
+        Tests an update of ourselves.
+        """
+        album = Album(artist='Artist', album='Album', album_type='ep',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist')
+        self.assertEqual(album_row['alalbum'], 'Album')
+        self.assertEqual(album_row['altype'], 'ep')
+        self.assertEqual(album_row['totaltracks'], 1)
+        self.assertEqual(album_row['totalseconds'], 120)
+
+        # Now update the object and save out, and test.
+        album.artist = 'Artist 2'
+        album.album = 'Album 2'
+        album.album_type = 'live'
+        album.totaltracks = 2
+        album.totalseconds = 240
+        album.update(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist 2')
+        self.assertEqual(album_row['alalbum'], 'Album 2')
+        self.assertEqual(album_row['altype'], 'live')
+        self.assertEqual(album_row['totaltracks'], 2)
+        self.assertEqual(album_row['totalseconds'], 240)
+
+    def test_update_no_commit(self):
+        """
+        Tests an update of ourselves without committing
+        """
+        album = Album(artist='Artist', album='Album', album_type='ep',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist')
+        self.assertEqual(album_row['alalbum'], 'Album')
+        self.assertEqual(album_row['altype'], 'ep')
+        self.assertEqual(album_row['totaltracks'], 1)
+        self.assertEqual(album_row['totalseconds'], 120)
+
+        # Now update the object and save out, and test.
+        album.artist = 'Artist 2'
+        album.album = 'Album 2'
+        album.album_type = 'live'
+        album.totaltracks = 2
+        album.totalseconds = 240
+        album.update(self.app.db, self.app.curs, commit=False)
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist 2')
+        self.assertEqual(album_row['alalbum'], 'Album 2')
+        self.assertEqual(album_row['altype'], 'live')
+        self.assertEqual(album_row['totaltracks'], 2)
+        self.assertEqual(album_row['totalseconds'], 240)
+        self.app.db.rollback()
+        self.assertEqual(self.get_album_count(), 1)
+        album_row = self.get_album_by_id(pk)
+        self.assertEqual(album_row['alartist'], 'Artist')
+        self.assertEqual(album_row['alalbum'], 'Album')
+        self.assertEqual(album_row['altype'], 'ep')
+        self.assertEqual(album_row['totaltracks'], 1)
+        self.assertEqual(album_row['totalseconds'], 120)
+
+    def test_update_no_pk(self):
+        """
+        Tests an update when the Album object has no PK (should raise
+        an Exception)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120)
+        with self.assertRaises(Exception):
+            album.update(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 0)
+
+    def test_from_database_row(self):
+        """
+        Tests creation of an Album object from a database row.
+        """
+        orig_album = Album(artist='Artist', album='Album', album_type='ep',
+            totaltracks=1, totalseconds=120, last_transform=5)
+        pk = orig_album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 1)
+
+        album = Album.from_database_row(self.get_album_by_id(pk))
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.album_type, 'ep')
+        self.assertEqual(album.totalseconds, 120)
+        self.assertEqual(album.totaltracks, 1)
+        self.assertEqual(album.last_transform, 5)
+        self.assertEqual(album.pk, pk)
+
+    def test_get_all_need_transform_no_albums(self):
+        """
+        Test for when there are no albums in the database to return
+        """
+        self.assertEqual(Album.get_all_need_transform(self.app.curs, 1), [])
+
+    def test_get_all_need_transform_no_albums_matched(self):
+        """
+        Test for when there is an album in the database but it doesn't match.
+        """
+        orig_album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120, last_transform=1)
+        pk = orig_album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 1)
+
+        self.assertEqual(Album.get_all_need_transform(self.app.curs, 1), [])
+
+    def test_get_all_need_transform_one_album(self):
+        """
+        Test for when there is one album returned.
+        """
+        orig_album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120)
+        pk = orig_album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 1)
+
+        albums = Album.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(albums), 1)
+        self.assertEqual(albums[0].pk, pk)
+
+    def test_get_all_need_transform_one_album_another_already_applied(self):
+        """
+        Test for when there is one album returned when there's also another
+        album which has already had the transform applied.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120, last_transform=1)
+        pk = album.insert(self.app.db, self.app.curs)
+        album = Album(artist='Artist', album='Album 2',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 2)
+
+        albums = Album.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(albums), 1)
+        self.assertEqual(albums[0].pk, pk)
+
+    def test_get_all_need_transform_two_albums(self):
+        """
+        Test for when there are two albums returned.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        album = Album(artist='Artist', album='Album 2',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        self.assertEqual(self.get_album_count(), 2)
+
+        albums = Album.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(albums), 2)
 
 class TrackDatabaseTests(DatabaseTest):
     """
@@ -1737,6 +2495,87 @@ class ApplyTransformsTests(DatabaseTest):
     transform logic is tested elsewhere in here, so we're mostly just interested
     in making sure that our transform ID gets updated where appropriate.
     """
+
+    def test_apply_transform_single_album_no_match(self):
+        """
+        A single album in the database needs an update, where the
+        album does not match the transform.  (Should still update the
+        last_transform ID.)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Foo',
+            change_artist=True, to_artist='Bar')
+        self.assertNotEqual(tf_pk, 0)
+        self.app.load_data()
+
+        row = self.get_album_by_id(pk)
+        self.assertEqual(row['lasttransform'], 0)
+
+        for line in self.app.apply_transforms():
+            pass
+
+        row = self.get_album_by_id(pk)
+        self.assertEqual(row['lasttransform'], tf_pk)
+
+    def test_apply_transform_single_album_match(self):
+        """
+        A single album in the database needs an update, where the
+        album matches the transform.
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120)
+        pk = album.insert(self.app.db, self.app.curs)
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='New Artist')
+        self.assertNotEqual(tf_pk, 0)
+        self.app.load_data()
+
+        row = self.get_album_by_id(pk)
+        self.assertEqual(row['lasttransform'], 0)
+
+        for line in self.app.apply_transforms():
+            pass
+
+        row = self.get_album_by_id(pk)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        self.assertEqual(row['alartist'], 'New Artist')
+
+    def test_apply_transform_two_albums_one_matches(self):
+        """
+        Two albums are in the database, one already has the transform applied but
+        the other does not.  Both should end up at the same last_transform ID.
+        The album whose last_transform is already high enough should remain
+        untouched even though the transform theoretically matches.
+        """
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        self.assertNotEqual(tf_pk, 0)
+
+        self.app.load_data()
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=120, last_transform=tf_pk)
+        pk_first = album.insert(self.app.db, self.app.curs)
+        album = Album(artist='Artist', album='Album 2',
+            totaltracks=1, totalseconds=120)
+        pk_second = album.insert(self.app.db, self.app.curs)
+
+        row = self.get_album_by_id(pk_first)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        row = self.get_album_by_id(pk_second)
+        self.assertEqual(row['lasttransform'], 0)
+
+        for line in self.app.apply_transforms():
+            pass
+
+        row = self.get_album_by_id(pk_first)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        self.assertEqual(row['alartist'], 'Artist')
+
+        row = self.get_album_by_id(pk_second)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        self.assertEqual(row['alartist'], 'Artist 2')
 
     def test_apply_transform_single_track_no_match(self):
         """

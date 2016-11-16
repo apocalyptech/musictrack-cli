@@ -71,6 +71,39 @@ class Transform(object):
         # Update the track with our transform ID
         track.last_transform = self.pk
 
+    def apply_album(self, album):
+        """
+        Applies ourself to an album
+        """
+
+        # First off - any transform specifying a track condition or
+        # change won't apply to an album.
+        if self.cond_title or self.change_title:
+            return False
+
+        # Do our stuff
+        matched = False
+        if self.cond_artist or self.cond_album:
+            matched = True
+            if self.cond_artist and album.artist != self.pattern_artist:
+                matched = False
+            if self.cond_album and album.album != self.pattern_album:
+                matched = False
+
+        # Apply our requested changes, if we match
+        if matched:
+            if self.change_artist:
+                if album.artist != self.to_artist:
+                    album.artist = self.to_artist
+                    album.transformed = True
+            if self.change_album:
+                if album.album != self.to_album:
+                    album.album = self.to_album
+                    album.transformed = True
+
+        # Update the album with our transform ID
+        album.last_transform = self.pk
+
 class TransformList(object):
     """
     Our entire pool of transforms - this is the class that App will
@@ -108,6 +141,21 @@ class TransformList(object):
         # Store the new transform
         self.transforms[transform.pk] = transform
         self.max_id = transform.pk
+
+    def apply_album(self, album):
+        """
+        Applies all necessary transforms to the given album.
+        """
+
+        # Return if we have nothing to do
+        if album.last_transform >= self.max_id:
+            return
+
+        # Otherwise, loop through transforms starting with
+        # the one after album.last_transform
+        for num in range(album.last_transform+1, self.max_id+1):
+            if num in self.transforms:
+                self.transforms[num].apply_album(album)
 
     def apply_track(self, track):
         """
@@ -244,7 +292,7 @@ class Track(object):
         if commit:
             db.commit()
 
-    def status_str(self):
+    def __str__(self):
         """
         Returns a str which identifies ourself for logging purposes
         """
@@ -355,6 +403,121 @@ class Track(object):
         for row in curs.fetchall():
             tracks.append(Track.from_database_row(row))
         return tracks
+
+class Album(object):
+    """
+    Information about an album
+    """
+
+    def __init__(self, artist='', album='', album_type='album',
+            totaltracks=0, totalseconds=0, last_transform=0, pk=0):
+        """
+        Constructor!
+        """
+        self.artist = artist
+        self.album = album
+        self.album_type = album_type
+        self.totaltracks = totaltracks
+        self.totalseconds = totalseconds
+        self.last_transform = last_transform
+        self.transformed = False
+
+        # Not populated until insert sometimes...
+        self.pk = pk
+
+    def ensure_data(self):
+        """
+        Ensures that we have valid data, basically that totaltracks and
+        totalseconds are not zero.  I don't want to have those values in
+        the DB.
+        """
+        if self.totaltracks == 0:
+            raise Exception('Total Tracks cannot be zero')
+
+        if self.totalseconds == 0:
+            raise Exception('Total Seconds cannot be zero')
+
+    def insert(self, db, curs, commit=True):
+        """
+        Inserts ourself into the database.  Returns the database ID of the
+        new track.  If ``commit`` is ``False``, we will not commit
+        the transaction (making passing in ``db`` silly, but whatever).
+        """
+
+        # Make sure we have valid data
+        self.ensure_data()
+
+        # Fields/Data
+        fields = ['alartist', 'alalbum', 'totaltracks', 'totalseconds',
+            'lasttransform', 'altype']
+        data = [self.artist, self.album, self.totaltracks, self.totalseconds,
+            self.last_transform, self.album_type]
+
+        # Construct our sql
+        sql = 'insert into album (%s) values (%s)' % (
+            ', '.join(fields),
+            ', '.join('%s' for field in fields))
+
+        # .... aaand run it!
+        curs.execute(sql, data)
+        if commit:
+            db.commit()
+
+        # Return our created ID
+        self.pk = curs.lastrowid
+        return curs.lastrowid
+
+    def update(self, db, curs, commit=True):
+        """
+        Updates ourselves in the database.  Requires that we have a
+        primary key set in our record.  If ``commit`` is passed in as
+        ``False``, we will not commit the transaction imediately (making
+        the passing in of ``db`` silly, but whatever).
+        """
+
+        if self.pk == 0:
+            raise Exception('Cannot update database record when PK is 0')
+
+        # Make sure we have valid data
+        self.ensure_data()
+
+        curs.execute("""update album set alartist=%s, alalbum=%s,
+            totaltracks=%s, totalseconds=%s, lasttransform=%s,
+            altype=%s where alid=%s""",
+            (self.artist, self.album, self.totaltracks, self.totalseconds,
+                self.last_transform, self.album_type, self.pk))
+        if commit:
+            db.commit()
+
+    def __str__(self):
+        """
+        Returns a str which identifies ourself for logging purposes
+        """
+        return 'ID %d: %s / %s' % (self.pk, self.artist, self.album)
+
+    @staticmethod
+    def from_database_row(row):
+        """
+        Returns a new Album object from a database row
+        """
+        return Album(artist=row['alartist'],
+            album=row['alalbum'],
+            totaltracks=row['totaltracks'],
+            totalseconds=row['totalseconds'],
+            last_transform=row['lasttransform'],
+            album_type=row['altype'],
+            pk=row['alid'])
+
+    @staticmethod
+    def get_all_need_transform(curs, max_transform):
+        """
+        Returns all albums which need transforms applied to them
+        """
+        albums = []
+        curs.execute('select * from album where lasttransform < %s', (max_transform,))
+        for row in curs.fetchall():
+            albums.append(Album.from_database_row(row))
+        return albums
 
 class AppArgumentParser(argparse.ArgumentParser):
     """
@@ -621,7 +784,7 @@ class App(object):
                 source=source,
                 timestamp=timestamp_start)
             tracks.append(track)
-            statuses.append('Track logged: %s' % (track.status_str()))
+            statuses.append('Track logged: %s' % (track))
         else:
             total_seconds = 0
             for filename in filenames:
@@ -636,7 +799,7 @@ class App(object):
                     commit=False)
                 statuses.append('Track logged at "%s": %s' % (
                     timestamp_start.replace(microsecond=0),
-                    track.status_str()))
+                    track))
                 timestamp_start += datetime.timedelta(seconds=track.seconds)
             self.db.commit()
 
@@ -651,14 +814,40 @@ class App(object):
         return value.
         """
 
+        # Process Albums
+        max_album_id = -1
+        for album in Album.get_all_need_transform(self.curs, self.transforms.max_id):
+            if album.pk > max_album_id:
+                max_album_id = album.pk
+            report_before = '(level %03d) %s' % (album.last_transform, album)
+            self.transforms.apply_album(album)
+            if album.transformed:
+                album.update(self.db, self.curs, commit=False)
+                report_after = '(level %03d) %s' % (album.last_transform, album)
+                yield 'Previous Album %s' % (report_before)
+                yield '     New Album %s' % (report_after)
+                yield '---'
+
         # Process Tracks
         max_track_id = -1
         for track in Track.get_all_need_transform(self.curs, self.transforms.max_id):
             if track.pk > max_track_id:
                 max_track_id = track.pk
+            report_before = '(level %03d) %s' % (track.last_transform, track)
             self.transforms.apply_track(track)
             if track.transformed:
                 track.update(self.db, self.curs, commit=False)
+                report_after = '(level %03d) %s' % (track.last_transform, track)
+                yield 'Previous Track %s' % (report_before)
+                yield '     New Track %s' % (report_after)
+                yield '---'
+
+        # Mass update of album lasttransform IDs
+        if max_album_id > -1:
+            yield 'Updating albums through %d to transform level %d' % (max_album_id,
+                self.transforms.max_id)
+            self.curs.execute('update album set lasttransform=%s where alid <= %s',
+                (self.transforms.max_id, max_album_id))
 
         # Mass update of track lasttransform IDs
         if max_track_id > -1:
