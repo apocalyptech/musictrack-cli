@@ -1080,6 +1080,253 @@ class TrackTests(unittest.TestCase):
         with self.assertRaises(Exception):
             track = Track.from_filename(filename)
 
+class TrackDatabaseTests(DatabaseTest):
+    """
+    Tests of our Track object which require a database.
+    """
+
+    def test_insert_simple(self):
+        """
+        Tests a simple track insert
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            tracknum=1, seconds=10, album_id=42, last_transform=5)
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['source'], 'xmms')
+        self.assertEqual(track_row['album_id'], 42)
+        self.assertEqual(track_row['tracknum'], 1)
+        self.assertEqual(track_row['seconds'], 10)
+        self.assertEqual(track_row['lasttransform'], 5)
+
+    def test_insert_minimal(self):
+        """
+        Tests a minimal track insert
+        """
+        track = Track(artist='Artist', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], '')
+        self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['source'], 'xmms')
+        self.assertEqual(track_row['album_id'], 0)
+        self.assertEqual(track_row['tracknum'], None)
+        self.assertEqual(track_row['seconds'], 0)
+        self.assertEqual(track_row['lasttransform'], 0)
+
+    def test_insert_invalid_source(self):
+        """
+        Tests a track insert when using an invalid source
+        """
+        track = Track(artist='Artist', title='Title')
+        with self.assertRaises(Exception):
+            pk = track.insert(self.app.db,
+                self.app.curs,
+                'foobar',
+                datetime.datetime.now())
+
+    def test_insert_no_commit(self):
+        """
+        Tests an insert where we do not commit the transaction.
+        """
+        track = Track(artist='Artist', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now(),
+            commit=False)
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['title'], 'Title')
+        self.app.db.rollback()
+        self.assertEqual(self.get_track_by_id(pk), None)
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_update(self):
+        """
+        Tests an update of ourselves.
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Title')
+
+        # Now update the object and save out, and test.
+        track.artist = 'Artist 2'
+        track.album = 'Album 2'
+        track.title = 'Title 2'
+        track.update(self.app.db, self.app.curs)
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist 2')
+        self.assertEqual(track_row['album'], 'Album 2')
+        self.assertEqual(track_row['title'], 'Title 2')
+
+    def test_update_no_commit(self):
+        """
+        Tests an update of ourselves without committing
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertNotEqual(pk, None)
+        self.assertNotEqual(pk, 0)
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Title')
+
+        # Now update the object and save out, and test.
+        track.artist = 'Artist 2'
+        track.album = 'Album 2'
+        track.title = 'Title 2'
+        track.update(self.app.db, self.app.curs, commit=False)
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist 2')
+        self.assertEqual(track_row['album'], 'Album 2')
+        self.assertEqual(track_row['title'], 'Title 2')
+        self.app.db.rollback()
+        self.assertEqual(self.get_track_count(), 1)
+        track_row = self.get_track_by_id(pk)
+        self.assertEqual(track_row['artist'], 'Artist')
+        self.assertEqual(track_row['album'], 'Album')
+        self.assertEqual(track_row['title'], 'Title')
+
+    def test_update_no_pk(self):
+        """
+        Tests an update when the Track object has no PK (should raise
+        an Exception)
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        with self.assertRaises(Exception):
+            track.update(self.app.db, self.app.curs)
+        self.assertEqual(self.get_track_count(), 0)
+
+    def test_from_database_row(self):
+        """
+        Tests creation of a Track object from a database row.
+        """
+        orig_track = Track(artist='Artist', album='Album', title='Title',
+            tracknum=1, seconds=10, album_id=42, last_transform=5)
+        pk = orig_track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 1)
+
+        track = Track.from_database_row(self.get_track_by_id(pk))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.seconds, 10)
+        self.assertEqual(track.album_id, 42)
+        self.assertEqual(track.last_transform, 5)
+        self.assertEqual(track.pk, pk)
+
+    def test_get_all_need_transform_no_tracks(self):
+        """
+        Test for when there are no tracks in the database to return
+        """
+        self.assertEqual(Track.get_all_need_transform(self.app.curs, 1), [])
+
+    def test_get_all_need_transform_no_tracks_matched(self):
+        """
+        Test for when there is a track in the database but it doesn't match.
+        """
+        track = Track(artist='Artist', album='Album', title='Title', last_transform=1)
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 1)
+
+        tracks = Track.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(tracks), 0)
+
+    def test_get_all_need_transform_one_track(self):
+        """
+        Test for when there is one track returned.
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 1)
+
+        tracks = Track.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0].pk, pk)
+
+    def test_get_all_need_transform_one_track_another_already_applied(self):
+        """
+        Test for when there is one track returned when there's also another
+        track which has already had the transform applied.
+        """
+        track = Track(artist='Artist', album='Album', title='Title', last_transform=1)
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        track = Track(artist='Artist', album='Album', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 2)
+
+        tracks = Track.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0].pk, pk)
+
+    def test_get_all_need_transform_two_tracks(self):
+        """
+        Test for when there are two tracks returned.
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 2)
+
+        tracks = Track.get_all_need_transform(self.app.curs, 1)
+        self.assertEqual(len(tracks), 2)
+
 class AppTests(unittest.TestCase):
     """
     Some tests of our main App object
@@ -1482,6 +1729,103 @@ class LogFilenamesTests(DatabaseTest):
                 if idx > 0:
                     self.assertGreater(track_obj['timestamp'],
                         track_objs[idx-1]['timestamp'])
+
+class ApplyTransformsTests(DatabaseTest):
+    """
+    Tests for our apply_transforms function, used to apply transforms to all
+    tracks/albums in the database which need them.  The majority of our
+    transform logic is tested elsewhere in here, so we're mostly just interested
+    in making sure that our transform ID gets updated where appropriate.
+    """
+
+    def test_apply_transform_single_track_no_match(self):
+        """
+        A single track in the database needs an update, where the
+        track does not match the transform.  (Should still update the
+        last_transform ID.)
+        """
+        track = Track(artist='Artist', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Foo',
+            change_artist=True, to_artist='Bar')
+        self.assertNotEqual(tf_pk, 0)
+        self.app.load_data()
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['lasttransform'], 0)
+
+        for line in self.app.apply_transforms():
+            pass
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['lasttransform'], tf_pk)
+
+    def test_apply_transform_single_track_match(self):
+        """
+        A single track in the database needs an update, where the
+        track matches the transform.
+        """
+        track = Track(artist='Artist', title='Title')
+        pk = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='New Artist')
+        self.assertNotEqual(tf_pk, 0)
+        self.app.load_data()
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['lasttransform'], 0)
+
+        for line in self.app.apply_transforms():
+            pass
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        self.assertEqual(row['artist'], 'New Artist')
+
+    def test_apply_transform_two_tracks_one_matches(self):
+        """
+        Two tracks are in the database, one already has the transform applied but
+        the other does not.  Both should end up at the same last_transform ID.
+        The track whose last_transform is already high enough should remain
+        untouched even though the transform theoretically matches.
+        """
+        tf_pk = self.add_transform(cond_artist=True, pattern_artist='Artist',
+            change_artist=True, to_artist='Artist 2')
+        self.assertNotEqual(tf_pk, 0)
+
+        self.app.load_data()
+        track = Track(artist='Artist', title='Title', last_transform=tf_pk)
+        pk_first = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        track = Track(artist='Artist', title='Title')
+        pk_second = track.insert(self.app.db,
+            self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+
+        row = self.get_track_by_id(pk_first)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        row = self.get_track_by_id(pk_second)
+        self.assertEqual(row['lasttransform'], 0)
+
+        for line in self.app.apply_transforms():
+            pass
+
+        row = self.get_track_by_id(pk_first)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        self.assertEqual(row['artist'], 'Artist')
+
+        row = self.get_track_by_id(pk_second)
+        self.assertEqual(row['lasttransform'], tf_pk)
+        self.assertEqual(row['artist'], 'Artist 2')
 
 if __name__ == '__main__':
 

@@ -175,7 +175,8 @@ class Track(object):
     """
 
     def __init__(self, artist='', album='', title='',
-            tracknum=None, seconds=0):
+            tracknum=None, seconds=0, album_id=0,
+            last_transform=0, pk=0):
         """
         Constructor!
         """
@@ -185,13 +186,13 @@ class Track(object):
         self.tracknum = tracknum
         self.seconds = seconds
 
-        self.album_id = 0
+        self.album_id = album_id
 
-        self.last_transform = 0
+        self.last_transform = last_transform
         self.transformed = False
 
-        # Only populated when database actions occur
-        self.pk = 0
+        # Not populated until insert sometimes...
+        self.pk = pk
 
     def insert(self, db, curs, source, timestamp, commit=True):
         """
@@ -224,6 +225,24 @@ class Track(object):
         # Return our created ID
         self.pk = curs.lastrowid
         return curs.lastrowid
+
+    def update(self, db, curs, commit=True):
+        """
+        Updates ourselves in the database.  Requires that we have a
+        primary key set in our record.  Note that because this is something
+        which only occurs after transforms, this will only update the
+        artist, album, and track fields.  If ``commit`` is passed in as
+        ``False``, we will not commit the transaction imediately (making
+        the passing in of ``db`` silly, but whatever).
+        """
+
+        if self.pk == 0:
+            raise Exception('Cannot update database record when PK is 0')
+
+        curs.execute('update track set artist=%s, album=%s, title=%s where id=%s',
+            (self.artist, self.album, self.title, self.pk))
+        if commit:
+            db.commit()
 
     def status_str(self):
         """
@@ -311,6 +330,31 @@ class Track(object):
             title=title,
             tracknum=tracknum,
             seconds=seconds)
+
+    @staticmethod
+    def from_database_row(row):
+        """
+        Returns a new Track object from a database row
+        """
+        return Track(artist=row['artist'],
+            album=row['album'],
+            title=row['title'],
+            tracknum=row['tracknum'],
+            seconds=row['seconds'],
+            album_id=row['album_id'],
+            last_transform=row['lasttransform'],
+            pk=row['id'])
+
+    @staticmethod
+    def get_all_need_transform(curs, max_transform):
+        """
+        Returns all tracks which need transforms applied to them
+        """
+        tracks = []
+        curs.execute('select * from track where lasttransform < %s', (max_transform,))
+        for row in curs.fetchall():
+            tracks.append(Track.from_database_row(row))
+        return tracks
 
 class AppArgumentParser(argparse.ArgumentParser):
     """
@@ -599,6 +643,33 @@ class App(object):
         # Return what we did
         return (tracks, statuses)
 
+    def apply_transforms(self):
+        """
+        Applies transforms to our tracks and albums - whatever actually needs doing
+        in the database.  Functions as an iterator - will yield strings as it goes
+        to provide output to the user.  As such, does not actually have a meaningful
+        return value.
+        """
+
+        # Process Tracks
+        max_track_id = -1
+        for track in Track.get_all_need_transform(self.curs, self.transforms.max_id):
+            if track.pk > max_track_id:
+                max_track_id = track.pk
+            self.transforms.apply_track(track)
+            if track.transformed:
+                track.update(self.db, self.curs, commit=False)
+
+        # Mass update of track lasttransform IDs
+        if max_track_id > -1:
+            yield 'Updating tracks through %d to transform level %d' % (max_track_id,
+                self.transforms.max_id)
+            self.curs.execute('update track set lasttransform=%s where id <= %s',
+                (self.transforms.max_id, max_track_id))
+
+        # Commit!
+        self.db.commit()
+
     @staticmethod
     def activity_log():
         """
@@ -699,3 +770,20 @@ class App(object):
 
             App.result_log(str(e))
             raise e
+
+    @staticmethod
+    def cli_transform():
+        """
+        Applies any transforms to our tracks and albums which have not been
+        applied yet.
+        """
+
+        # Parse arguments
+        parser = AppArgumentParser(description='Applies transforms which need to be applied')
+        args = parser.parse_args()
+
+        # Do the work
+        app = App(args.database)
+        for line in app.apply_transforms():
+            print(line)
+        app.close()
