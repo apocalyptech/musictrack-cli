@@ -2089,6 +2089,87 @@ class TrackDatabaseTests(DatabaseTest):
         tracks = Track.get_all_need_transform(self.app.curs, 1)
         self.assertEqual(len(tracks), 2)
 
+    def test_get_all_unassociated_no_tracks(self):
+        """
+        No tracks in the database, should return an empty list
+        """
+        self.assertEqual(self.get_track_count(), 0)
+        tracks = Track.get_all_unassociated(self.app.curs)
+        self.assertEqual(tracks, [])
+
+    def test_get_all_unassociated_single_track_without_album(self):
+        """
+        A single unassociated track in the database, but without an
+        album title so it should not be returned.
+        """
+        track = Track(artist='Artist', title='Title')
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 1)
+        tracks = Track.get_all_unassociated(self.app.curs)
+        self.assertEqual(len(tracks), 0)
+
+    def test_get_all_unassociated_single_track_with_album(self):
+        """
+        A single unassociated track in the database
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 1)
+        tracks = Track.get_all_unassociated(self.app.curs)
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0].artist, 'Artist')
+        self.assertEqual(tracks[0].title, 'Title')
+        self.assertEqual(tracks[0].album_id, 0)
+
+    def test_get_all_unassociated_two_tracks_with_album(self):
+        """
+        Two unassociated tracks in the database
+        """
+        track = Track(artist='Artist', album='Album', title='Title')
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 2)
+        tracks = Track.get_all_unassociated(self.app.curs)
+        self.assertEqual(len(tracks), 2)
+        for tracknum in [0, 1]:
+            with self.subTest(tracknum=tracknum):
+                self.assertEqual(tracks[tracknum].artist, 'Artist')
+                self.assertEqual(tracks[tracknum].title, 'Title')
+                self.assertEqual(tracks[tracknum].album_id, 0)
+
+    def test_get_all_unassociated_single_track_already_associated(self):
+        """
+        A single associated track in the database, no data should be returned.
+        """
+        track = Track(artist='Artist', album='Album',
+            title='Title', album_id=1)
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 1)
+        tracks = Track.get_all_unassociated(self.app.curs)
+        self.assertEqual(len(tracks), 0)
+
+    def test_get_all_unassociated_two_tracks_one_unassociated(self):
+        """
+        Two tracks in the database - one is associated, the other is not.
+        """
+        track = Track(artist='Artist', album='Album',
+            title='Title', album_id=1)
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        track = Track(artist='Artist 2', album='Album 2', title='Title 2')
+        track.insert(self.app.db, self.app.curs,
+            'xmms', datetime.datetime.now())
+        self.assertEqual(self.get_track_count(), 2)
+        tracks = Track.get_all_unassociated(self.app.curs)
+        self.assertEqual(tracks[0].artist, 'Artist 2')
+        self.assertEqual(tracks[0].title, 'Title 2')
+        self.assertEqual(tracks[0].album_id, 0)
+
 class AppTests(unittest.TestCase):
     """
     Some tests of our main App object
@@ -2963,6 +3044,108 @@ class AddAlbumTests(DatabaseTest):
         self.assertEqual(added, False)
         self.assertIn('Unable to load', status)
         self.assertEqual(self.get_album_count(), 0)
+
+class AssociateAlbumTests(DatabaseTest):
+    """
+    Class for our album-association util, which associates any unassociated
+    track to an album.
+    """
+
+    def test_track_without_association(self):
+        """
+        Tests a track which doesn't have an association to be made in the
+        database.
+        """
+        track = Track(artist='Artist', album='Album')
+        pk = track.insert(self.app.db, self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+
+        for line in self.app.associate_albums():
+            pass
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['album_id'], 0)
+
+    def test_track_with_association(self):
+        """
+        Tests a track which DOES have an association to be made in the
+        database.
+        """
+        album_pk = self.add_album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=2)
+        track = Track(artist='Artist', album='Album')
+        pk = track.insert(self.app.db, self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['album_id'], 0)
+
+        for line in self.app.associate_albums():
+            pass
+
+        row = self.get_track_by_id(pk)
+        self.assertEqual(row['album_id'], album_pk)
+
+    def test_two_tracks_with_association(self):
+        """
+        Tests two tracks which DO have an association to be made in the
+        database.
+        """
+        album_pk = self.add_album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=2)
+        track = Track(artist='Artist', album='Album')
+        pk_first = track.insert(self.app.db, self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        pk_second = track.insert(self.app.db, self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+
+        row = self.get_track_by_id(pk_first)
+        self.assertEqual(row['album_id'], 0)
+        row = self.get_track_by_id(pk_second)
+        self.assertEqual(row['album_id'], 0)
+
+        for line in self.app.associate_albums():
+            pass
+
+        row = self.get_track_by_id(pk_first)
+        self.assertEqual(row['album_id'], album_pk)
+        row = self.get_track_by_id(pk_second)
+        self.assertEqual(row['album_id'], album_pk)
+
+    def test_two_tracks_with_two_associations(self):
+        """
+        Tests two tracks which have associations to be made, a different
+        one for each track.
+        """
+        album_pk_first = self.add_album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=2)
+        album_pk_second = self.add_album(artist='Artist 2', album='Album 2',
+            totaltracks=1, totalseconds=2)
+        track = Track(artist='Artist', album='Album')
+        pk_first = track.insert(self.app.db, self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+        track = Track(artist='Artist 2', album='Album 2')
+        pk_second = track.insert(self.app.db, self.app.curs,
+            'xmms',
+            datetime.datetime.now())
+
+        row = self.get_track_by_id(pk_first)
+        self.assertEqual(row['album_id'], 0)
+        row = self.get_track_by_id(pk_second)
+        self.assertEqual(row['album_id'], 0)
+
+        for line in self.app.associate_albums():
+            pass
+
+        row = self.get_track_by_id(pk_first)
+        self.assertEqual(row['album_id'], album_pk_first)
+        row = self.get_track_by_id(pk_second)
+        self.assertEqual(row['album_id'], album_pk_second)
 
 class AppArgumentParserTests(unittest.TestCase):
     """

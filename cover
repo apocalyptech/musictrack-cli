@@ -1,1 +1,1 @@
-coverage run ./tests.py && coverage report -m
+coverage run --source=app.py ./tests.py && coverage report -m

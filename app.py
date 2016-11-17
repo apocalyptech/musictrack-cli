@@ -277,9 +277,7 @@ class Track(object):
     def update(self, db, curs, commit=True):
         """
         Updates ourselves in the database.  Requires that we have a
-        primary key set in our record.  Note that because this is something
-        which only occurs after transforms, this will only update the
-        artist, album, and track fields.  If ``commit`` is passed in as
+        primary key set in our record.  If ``commit`` is passed in as
         ``False``, we will not commit the transaction imediately (making
         the passing in of ``db`` silly, but whatever).
         """
@@ -287,8 +285,10 @@ class Track(object):
         if self.pk == 0:
             raise Exception('Cannot update database record when PK is 0')
 
-        curs.execute('update track set artist=%s, album=%s, title=%s where id=%s',
-            (self.artist, self.album, self.title, self.pk))
+        curs.execute("""update track set artist=%s, album=%s, album_id=%s, title=%s,
+            tracknum=%s, seconds=%s where id=%s""",
+            (self.artist, self.album, self.album_id, self.title,
+                self.tracknum, self.seconds, self.pk))
         if commit:
             db.commit()
 
@@ -400,6 +400,17 @@ class Track(object):
         """
         tracks = []
         curs.execute('select * from track where lasttransform < %s', (max_transform,))
+        for row in curs.fetchall():
+            tracks.append(Track.from_database_row(row))
+        return tracks
+
+    @staticmethod
+    def get_all_unassociated(curs):
+        """
+        Returns all tracks without an album association
+        """
+        tracks = []
+        curs.execute('select * from track where album_id = 0 and album != \'\'')
         for row in curs.fetchall():
             tracks.append(Track.from_database_row(row))
         return tracks
@@ -989,3 +1000,21 @@ class App(object):
                 return_arr.append('Use --force to perform the update')
 
             return (return_val, "\n".join(return_arr))
+
+    def associate_albums(self):
+        """
+        Associates any unassociated tracks with albums, for tracks which don't already
+        have that association.  Will yield a set of strings suitable for passing back
+        to the user, so does not have a meaningful return code.
+        """
+        tracks = Track.get_all_unassociated(self.curs)
+        not_found = set()
+        for track in tracks:
+            album_id = self.set_album_id(track)
+            if album_id == 0:
+                not_found.add('%s / %s' % (track.artist, track.album))
+            else:
+                track.update(self.db, self.curs)
+                yield 'Updated track: %s' % (track)
+        for identifier in not_found:
+            yield 'No matching album found for: %s' % (identifier)
