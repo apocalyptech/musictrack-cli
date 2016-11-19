@@ -18,9 +18,13 @@ class Transform(object):
     """
 
     def __init__(self, pk, cond_artist=False, cond_album=False, cond_title=False,
+            cond_ensemble=False, cond_composer=False, cond_conductor=False,
             change_artist=False, change_album=False, change_title=False,
+            change_ensemble=False, change_composer=False, change_conductor=False,
             pattern_artist='', pattern_album='', pattern_title='',
-            to_artist='', to_album='', to_title=''):
+            pattern_ensemble='', pattern_composer='', pattern_conductor='',
+            to_artist='', to_album='', to_title='',
+            to_ensemble='', to_composer='', to_conductor=''):
         """
         Constructor
         """
@@ -28,15 +32,27 @@ class Transform(object):
         self.cond_artist = cond_artist
         self.cond_album = cond_album
         self.cond_title = cond_title
+        self.cond_ensemble = cond_ensemble
+        self.cond_composer = cond_composer
+        self.cond_conductor = cond_conductor
         self.change_artist = change_artist
         self.change_album = change_album
         self.change_title = change_title
+        self.change_ensemble = change_ensemble
+        self.change_composer = change_composer
+        self.change_conductor = change_conductor
         self.pattern_artist = pattern_artist
         self.pattern_album = pattern_album
         self.pattern_title = pattern_title
+        self.pattern_ensemble = pattern_ensemble
+        self.pattern_composer = pattern_composer
+        self.pattern_conductor = pattern_conductor
         self.to_artist = to_artist
         self.to_album = to_album
         self.to_title = to_title
+        self.to_ensemble = to_ensemble
+        self.to_composer = to_composer
+        self.to_conductor = to_conductor
 
     def apply_track(self, track):
         """
@@ -44,13 +60,20 @@ class Transform(object):
         """
         # Do our stuff 
         matched = False
-        if self.cond_artist or self.cond_album or self.cond_title:
+        if (self.cond_artist or self.cond_album or self.cond_title or self.cond_ensemble or
+                self.cond_composer or self.cond_conductor):
             matched = True
             if self.cond_artist and track.artist != self.pattern_artist:
                 matched = False
             if self.cond_album and track.album != self.pattern_album:
                 matched = False
             if self.cond_title and track.title != self.pattern_title:
+                matched = False
+            if self.cond_ensemble and track.ensemble != self.pattern_ensemble:
+                matched = False
+            if self.cond_composer and track.composer != self.pattern_composer:
+                matched = False
+            if self.cond_conductor and track.conductor != self.pattern_conductor:
                 matched = False
 
         # Apply our requested changes, if we match
@@ -67,6 +90,18 @@ class Transform(object):
                 if track.title != self.to_title:
                     track.title = self.to_title
                     track.transformed = True
+            if self.change_ensemble:
+                if track.ensemble != self.to_ensemble:
+                    track.ensemble = self.to_ensemble
+                    track.transformed = True
+            if self.change_composer:
+                if track.composer != self.to_composer:
+                    track.composer = self.to_composer
+                    track.transformed = True
+            if self.change_conductor:
+                if track.conductor != self.to_conductor:
+                    track.conductor = self.to_conductor
+                    track.transformed = True
 
         # Update the track with our transform ID
         track.last_transform = self.pk
@@ -77,8 +112,10 @@ class Transform(object):
         """
 
         # First off - any transform specifying a track condition or
-        # change won't apply to an album.
-        if self.cond_title or self.change_title:
+        # change won't apply to an album.  Same for our classical fields.
+        if (self.cond_title or self.change_title or self.cond_ensemble or self.change_ensemble or
+                self.cond_composer or self.change_composer or
+                self.cond_conductor or self.change_conductor):
             return False
 
         # Do our stuff
@@ -204,15 +241,27 @@ class TransformList(object):
                 cond_artist = TransformList.int_to_bool(row, 'artistcond'),
                 cond_album = TransformList.int_to_bool(row, 'albumcond'),
                 cond_title = TransformList.int_to_bool(row, 'titlecond'),
+                cond_ensemble = TransformList.int_to_bool(row, 'ensemblecond'),
+                cond_composer = TransformList.int_to_bool(row, 'composercond'),
+                cond_conductor = TransformList.int_to_bool(row, 'conductorcond'),
                 change_artist = TransformList.int_to_bool(row, 'artistchange'),
                 change_album = TransformList.int_to_bool(row, 'albumchange'),
                 change_title = TransformList.int_to_bool(row, 'titlechange'),
+                change_ensemble = TransformList.int_to_bool(row, 'ensemblechange'),
+                change_composer = TransformList.int_to_bool(row, 'composerchange'),
+                change_conductor = TransformList.int_to_bool(row, 'conductorchange'),
                 pattern_artist = row['artistpat'],
                 pattern_album = row['albumpat'],
                 pattern_title = row['titlepat'],
+                pattern_ensemble = row['ensemblepat'],
+                pattern_composer = row['composerpat'],
+                pattern_conductor = row['conductorpat'],
                 to_artist = row['artistto'],
                 to_album = row['albumto'],
                 to_title = row['titleto'],
+                to_ensemble = row['ensembleto'],
+                to_composer = row['composerto'],
+                to_conductor = row['conductorto'],
             ))
 
         return tflist
@@ -223,6 +272,7 @@ class Track(object):
     """
 
     def __init__(self, artist='', album='', title='',
+            ensemble='', composer='', conductor='',
             tracknum=None, seconds=0, album_id=0,
             last_transform=0, pk=0):
         """
@@ -233,6 +283,10 @@ class Track(object):
         self.title = title
         self.tracknum = tracknum
         self.seconds = seconds
+
+        self.ensemble = ensemble
+        self.composer = composer
+        self.conductor = conductor
 
         self.album_id = album_id
 
@@ -252,10 +306,11 @@ class Track(object):
 
         # Make a list of our fields, and our data
         fields = ['lasttransform', 'album_id', 'artist', 'album',
+            'ensemble', 'composer', 'conductor',
             'title', 'source', 'timestamp', 'seconds']
-        data = [self.last_transform, self.album_id,
-            self.artist, self.album, self.title,
-            source, timestamp, self.seconds]
+        data = [self.last_transform, self.album_id, self.artist, self.album,
+            self.ensemble, self.composer, self.conductor,
+            self.title, source, timestamp, self.seconds]
         if self.tracknum is not None:
             fields.append('tracknum')
             data.append(self.tracknum)
@@ -286,8 +341,10 @@ class Track(object):
             raise Exception('Cannot update database record when PK is 0')
 
         curs.execute("""update track set artist=%s, album=%s, album_id=%s, title=%s,
+            ensemble=%s, composer=%s, conductor=%s,
             tracknum=%s, seconds=%s where id=%s""",
             (self.artist, self.album, self.album_id, self.title,
+                self.ensemble, self.composer, self.conductor,
                 self.tracknum, self.seconds, self.pk))
         if commit:
             db.commit()
@@ -313,6 +370,9 @@ class Track(object):
         artist = ''
         album = ''
         title = ''
+        ensemble = ''
+        conductor = ''
+        composer = ''
         tracknum = None
         seconds = None
 
@@ -323,6 +383,12 @@ class Track(object):
                 album = str(audio['TALB']).strip().strip("\x00")
             if 'TIT2' in audio: 
                 title = str(audio['TIT2']).strip().strip("\x00")
+            if 'TPE2' in audio: 
+                ensemble = str(audio['TPE2']).strip().strip("\x00")
+            if 'TCOM' in audio: 
+                composer = str(audio['TCOM']).strip().strip("\x00")
+            if 'TPE3' in audio: 
+                conductor = str(audio['TPE3']).strip().strip("\x00")
             if 'TRCK' in audio:
                 tracknum = str(audio['TRCK']).strip().strip("\x00")
                 if '/' in tracknum:
@@ -341,6 +407,12 @@ class Track(object):
                 album = str(audio['album'][0]).strip().strip("\x00")
             if 'title' in audio:
                 title = str(audio['title'][0]).strip().strip("\x00")
+            if 'ensemble' in audio:
+                ensemble = str(audio['ensemble'][0]).strip().strip("\x00")
+            if 'conductor' in audio:
+                conductor = str(audio['conductor'][0]).strip().strip("\x00")
+            if 'composer' in audio:
+                composer = str(audio['composer'][0]).strip().strip("\x00")
             if 'tracknumber' in audio:
                 tracknum = str(audio['tracknumber'][0]).strip().strip("\x00")
                 # Not sure if Ogg tags actually do this or not
@@ -362,6 +434,8 @@ class Track(object):
                 album = str(audio['\xa9alb'][0]).strip().strip("\x00")
             if '\xa9nam' in audio:
                 title = str(audio['\xa9nam'][0]).strip().strip("\x00")
+            if '\xa9wrt' in audio:
+                composer = str(audio['\xa9wrt'][0]).strip().strip("\x00")
             if 'trkn' in audio:
                 (tracknum, total_tracks) = audio['trkn'][0]
                 try:
@@ -376,6 +450,9 @@ class Track(object):
         return Track(artist=artist,
             album=album,
             title=title,
+            ensemble=ensemble,
+            composer=composer,
+            conductor=conductor,
             tracknum=tracknum,
             seconds=seconds)
 
@@ -387,6 +464,9 @@ class Track(object):
         return Track(artist=row['artist'],
             album=row['album'],
             title=row['title'],
+            ensemble=row['ensemble'],
+            conductor=row['conductor'],
+            composer=row['composer'],
             tracknum=row['tracknum'],
             seconds=row['seconds'],
             album_id=row['album_id'],
@@ -591,6 +671,9 @@ class App(object):
             artist varchar(200) not null,
             title varchar(255) not null,
             album varchar(200) not null,
+            ensemble varchar(200) not null default '',
+            conductor varchar(200) not null default '',
+            composer varchar(200) not null default '',
             tracknum int,
             seconds int, 
             source enum('xmms', 'car', 'stereo', 'cafe', 'vinyl') not null default 'xmms',
@@ -599,7 +682,10 @@ class App(object):
             primary key (id),
             index idx_artist (artist),
             index idx_title (title),
-            index idx_album (album)
+            index idx_album (album),
+            index idx_ensemble (ensemble),
+            index idx_composer (composer),
+            index idx_conductor (conductor)
         ) engine=innodb"""
 
     schema_album_drop = 'drop table if exists album'
@@ -623,15 +709,27 @@ class App(object):
             artistcond bool not null default 0,
             albumcond bool not null default 0,
             titlecond bool not null default 0,
+            ensemblecond bool not null default 0,
+            composercond bool not null default 0,
+            conductorcond bool not null default 0,
             artistchange bool not null default 0,
             albumchange bool not null default 0,
             titlechange bool not null default 0,
+            ensemblechange bool not null default 0,
+            composerchange bool not null default 0,
+            conductorchange bool not null default 0,
             artistpat varchar(200),
             albumpat varchar(200),
             titlepat varchar(255),
+            ensemblepat varchar(255),
+            composerpat varchar(255),
+            conductorpat varchar(255),
             artistto varchar(200),
             albumto varchar(200),
             titleto varchar(255), 
+            ensembleto varchar(255), 
+            composerto varchar(255), 
+            conductorto varchar(255), 
             primary key (tid)
         ) engine=innodb"""
 

@@ -25,9 +25,13 @@ class DatabaseTest(unittest.TestCase):
         self.app.close()
 
     def add_transform(self, cond_artist=False, cond_album=False, cond_title=False,
+            cond_ensemble=False, cond_composer=False, cond_conductor=False,
             change_artist=False, change_album=False, change_title=False,
+            change_ensemble=False, change_composer=False, change_conductor=False,
             pattern_artist='', pattern_album='', pattern_title='',
+            pattern_ensemble='', pattern_composer='', pattern_conductor='',
             to_artist='', to_album='', to_title='',
+            to_ensemble='', to_composer='', to_conductor='',
             commit=True):
         """
         Adds a new transform to our database, given the specified attributes.  Will
@@ -36,17 +40,29 @@ class DatabaseTest(unittest.TestCase):
         """
         self.app.curs.execute("""insert into transform (
             artistcond, albumcond, titlecond,
+            ensemblecond, composercond, conductorcond,
             artistchange, albumchange, titlechange,
+            ensemblechange, composerchange, conductorchange,
             artistpat, albumpat, titlepat,
-            artistto, albumto, titleto) values (
+            ensemblepat, composerpat, conductorpat,
+            artistto, albumto, titleto,
+            ensembleto, composerto, conductorto) values (
+            %s, %s, %s,
+            %s, %s, %s,
+            %s, %s, %s,
+            %s, %s, %s,
             %s, %s, %s,
             %s, %s, %s,
             %s, %s, %s,
             %s, %s, %s)""", (
                 cond_artist, cond_album, cond_title,
+                cond_ensemble, cond_composer, cond_conductor,
                 change_artist, change_album, change_title,
+                change_ensemble, change_composer, change_conductor,
                 pattern_artist, pattern_album, pattern_title,
+                pattern_ensemble, pattern_composer, pattern_conductor,
                 to_artist, to_album, to_title,
+                to_ensemble, to_composer, to_conductor,
         ))
         if commit:
             self.app.db.commit()
@@ -120,6 +136,7 @@ class TransformTests(unittest.TestCase):
         Given a track, apply a transformation which does nothing
         """
         track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', conductor='Conductor', composer='Composer',
             tracknum=1, seconds=60)
         transform = Transform(1, cond_artist=True, change_artist=True,
             pattern_artist='Foo', to_artist='Bar')
@@ -130,6 +147,9 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.ensemble, 'Ensemble')
+        self.assertEqual(track.conductor, 'Conductor')
+        self.assertEqual(track.composer, 'Composer')
         self.assertEqual(track.transformed, False)
     
     def test_transform_track_empty_transform(self):
@@ -138,11 +158,16 @@ class TransformTests(unittest.TestCase):
         anything.
         """
         track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', conductor='Conductor', composer='Composer',
             tracknum=1, seconds=60)
         transform = Transform(1,
             change_artist=True, pattern_artist='Artist', to_artist='Artist 2',
             change_album=True, pattern_album='Album', to_album='Album 2',
-            change_title=True, pattern_title='Title', to_title='Title 2')
+            change_title=True, pattern_title='Title', to_title='Title 2',
+            change_ensemble=True, pattern_ensemble='Ensemble', to_ensemble='Ensemble 2',
+            change_composer=True, pattern_composer='Composer', to_composer='Composer 2',
+            change_conductor=True, pattern_conductor='Conductor', to_conductor='Conductor 2',
+            )
 
         self.assertEqual(track.last_transform, 0)
         transform.apply_track(track)
@@ -150,6 +175,9 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.ensemble, 'Ensemble')
+        self.assertEqual(track.conductor, 'Conductor')
+        self.assertEqual(track.composer, 'Composer')
         self.assertEqual(track.transformed, False)
     
     def test_transform_track_change_artist(self):
@@ -197,16 +225,66 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.title, 'Title 2')
         self.assertEqual(track.transformed, True)
     
+    def test_transform_track_change_ensemble(self):
+        """
+        Given a track, apply a transformation which changes the ensemble
+        """
+        track = Track(artist='Artist', album='Album', ensemble='Ensemble',
+            tracknum=1, seconds=60)
+        transform = Transform(1, cond_ensemble=True, change_ensemble=True,
+            pattern_ensemble='Ensemble', to_ensemble='Ensemble 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.ensemble, 'Ensemble 2')
+        self.assertEqual(track.transformed, True)
+    
+    def test_transform_track_change_composer(self):
+        """
+        Given a track, apply a transformation which changes the composer
+        """
+        track = Track(artist='Artist', album='Album', composer='Composer',
+            tracknum=1, seconds=60)
+        transform = Transform(1, cond_composer=True, change_composer=True,
+            pattern_composer='Composer', to_composer='Composer 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.composer, 'Composer 2')
+        self.assertEqual(track.transformed, True)
+    
+    def test_transform_track_change_conductor(self):
+        """
+        Given a track, apply a transformation which changes the conductor
+        """
+        track = Track(artist='Artist', album='Album', conductor='Conductor',
+            tracknum=1, seconds=60)
+        transform = Transform(1, cond_conductor=True, change_conductor=True,
+            pattern_conductor='Conductor', to_conductor='Conductor 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.conductor, 'Conductor 2')
+        self.assertEqual(track.transformed, True)
+    
     def test_transform_track_full_transform(self):
         """
         Given a track, apply a transformation which matches on all fields.
         """
         track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', conductor='Conductor', composer='Composer',
             tracknum=1, seconds=60)
         transform = Transform(1,
             cond_artist=True, change_artist=True, pattern_artist='Artist', to_artist='Artist 2',
             cond_album=True, change_album=True, pattern_album='Album', to_album='Album 2',
-            cond_title=True, change_title=True, pattern_title='Title', to_title='Title 2')
+            cond_title=True, change_title=True, pattern_title='Title', to_title='Title 2',
+            cond_ensemble=True, change_ensemble=True, pattern_ensemble='Ensemble', to_ensemble='Ensemble 2',
+            cond_composer=True, change_composer=True, pattern_composer='Composer', to_composer='Composer 2',
+            cond_conductor=True, change_conductor=True, pattern_conductor='Conductor', to_conductor='Conductor 2',
+            )
 
         self.assertEqual(track.last_transform, 0)
         transform.apply_track(track)
@@ -214,6 +292,9 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist 2')
         self.assertEqual(track.album, 'Album 2')
         self.assertEqual(track.title, 'Title 2')
+        self.assertEqual(track.ensemble, 'Ensemble 2')
+        self.assertEqual(track.conductor, 'Conductor 2')
+        self.assertEqual(track.composer, 'Composer 2')
         self.assertEqual(track.transformed, True)
     
     def test_transform_track_album_based_on_artist_album_match(self):
@@ -635,6 +716,189 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(track.album, 'Album 2')
         self.assertEqual(track.title, 'Title')
         self.assertEqual(track.transformed, False)
+
+    def test_transform_track_ensemble_based_on_artist_ensemble_match(self):
+        """
+        Given a track, transform its ensemble based on matching both the artist and ensemble.
+        Will match the tested track.
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_ensemble=True, change_ensemble=True,
+            pattern_ensemble='Ensemble', to_ensemble='Ensemble 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.ensemble, 'Ensemble 2')
+        self.assertEqual(track.transformed, True)
+
+    def test_transform_track_ensemble_based_on_artist_ensemble_no_match_ensemble(self):
+        """
+        Given a track, transform its ensemble based on matching both the artist and ensemble.
+        Will NOT match the tested track, based on an incorrect ensemble.
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble 3',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_ensemble=True, change_ensemble=True,
+            pattern_ensemble='Ensemble', to_ensemble='Ensemble 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.ensemble, 'Ensemble 3')
+        self.assertEqual(track.transformed, False)
+
+    def test_transform_track_ensemble_based_on_artist_ensemble_no_match_artist(self):
+        """
+        Given a track, transform its ensemble based on matching both the artist and ensemble.
+        Will NOT match the tested track, based on an incorrect artist.
+        """
+        track = Track(artist='Artist 2', album='Album', title='Title',
+            ensemble='Ensemble',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_ensemble=True, change_ensemble=True,
+            pattern_ensemble='Ensemble', to_ensemble='Ensemble 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist 2')
+        self.assertEqual(track.ensemble, 'Ensemble')
+        self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.transformed, False)
+
+    def test_transform_track_conductor_based_on_artist_conductor_match(self):
+        """
+        Given a track, transform its conductor based on matching both the artist and conductor.
+        Will match the tested track.
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            conductor='Conductor',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_conductor=True, change_conductor=True,
+            pattern_conductor='Conductor', to_conductor='Conductor 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.conductor, 'Conductor 2')
+        self.assertEqual(track.transformed, True)
+
+    def test_transform_track_conductor_based_on_artist_conductor_no_match_conductor(self):
+        """
+        Given a track, transform its conductor based on matching both the artist and conductor.
+        Will NOT match the tested track, based on an incorrect conductor.
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            conductor='Conductor 3',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_conductor=True, change_conductor=True,
+            pattern_conductor='Conductor', to_conductor='Conductor 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.conductor, 'Conductor 3')
+        self.assertEqual(track.transformed, False)
+
+    def test_transform_track_conductor_based_on_artist_conductor_no_match_artist(self):
+        """
+        Given a track, transform its conductor based on matching both the artist and conductor.
+        Will NOT match the tested track, based on an incorrect artist.
+        """
+        track = Track(artist='Artist 2', album='Album', title='Title',
+            conductor='Conductor',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_conductor=True, change_conductor=True,
+            pattern_conductor='Conductor', to_conductor='Conductor 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist 2')
+        self.assertEqual(track.conductor, 'Conductor')
+        self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.transformed, False)
+
+    def test_transform_track_composer_based_on_artist_composer_match(self):
+        """
+        Given a track, transform its composer based on matching both the artist and composer.
+        Will match the tested track.
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            composer='Composer',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_composer=True, change_composer=True,
+            pattern_composer='Composer', to_composer='Composer 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.composer, 'Composer 2')
+        self.assertEqual(track.transformed, True)
+
+    def test_transform_track_composer_based_on_artist_composer_no_match_composer(self):
+        """
+        Given a track, transform its composer based on matching both the artist and composer.
+        Will NOT match the tested track, based on an incorrect composer.
+        """
+        track = Track(artist='Artist', album='Album', title='Title',
+            composer='Composer 3',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_composer=True, change_composer=True,
+            pattern_composer='Composer', to_composer='Composer 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.composer, 'Composer 3')
+        self.assertEqual(track.transformed, False)
+
+    def test_transform_track_composer_based_on_artist_composer_no_match_artist(self):
+        """
+        Given a track, transform its composer based on matching both the artist and composer.
+        Will NOT match the tested track, based on an incorrect artist.
+        """
+        track = Track(artist='Artist 2', album='Album', title='Title',
+            composer='Composer',
+            tracknum=1, seconds=60)
+        transform = Transform(1,
+            cond_artist=True, pattern_artist='Artist',
+            cond_composer=True, change_composer=True,
+            pattern_composer='Composer', to_composer='Composer 2')
+
+        self.assertEqual(track.last_transform, 0)
+        transform.apply_track(track)
+        self.assertEqual(track.last_transform, 1)
+        self.assertEqual(track.artist, 'Artist 2')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.transformed, False)
     
     def test_transform_album_no_changes(self):
         """
@@ -706,6 +970,138 @@ class TransformTests(unittest.TestCase):
             pattern_album='Album', to_album='Album 2',
             change_title=True,
             to_title='Title 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_ensemblecond_specified(self):
+        """
+        Given an album, apply a transformation which has a condition on the
+        ensemble (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            cond_ensemble=True,
+            pattern_ensemble='Ensemble')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_ensemblechange_specified(self):
+        """
+        Given an album, apply a transformation which has a change on the
+        ensemble (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            change_ensemble=True,
+            to_ensemble='Ensemble 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_conductorcond_specified(self):
+        """
+        Given an album, apply a transformation which has a condition on the
+        conductor (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            cond_conductor=True,
+            pattern_conductor='Conductor')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_conductorchange_specified(self):
+        """
+        Given an album, apply a transformation which has a change on the
+        conductor (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            change_conductor=True,
+            to_conductor='Conductor 2')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_composercond_specified(self):
+        """
+        Given an album, apply a transformation which has a condition on the
+        composer (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            cond_composer=True,
+            pattern_composer='Composer')
+
+        self.assertEqual(album.last_transform, 0)
+        transform.apply_album(album)
+        self.assertEqual(album.last_transform, 0)
+        self.assertEqual(album.artist, 'Artist')
+        self.assertEqual(album.album, 'Album')
+        self.assertEqual(album.transformed, False)
+    
+    def test_transform_album_with_composerchange_specified(self):
+        """
+        Given an album, apply a transformation which has a change on the
+        composer (the transform should not be applied at all)
+        """
+        album = Album(artist='Artist', album='Album',
+            totaltracks=1, totalseconds=60)
+        transform = Transform(1,
+            cond_artist=True, change_artist=True,
+            pattern_artist='Artist', to_artist='Artist 2',
+            cond_album=True, change_album=True,
+            pattern_album='Album', to_album='Album 2',
+            change_composer=True,
+            to_composer='Composer 2')
 
         self.assertEqual(album.last_transform, 0)
         transform.apply_album(album)
@@ -1433,15 +1829,27 @@ class TransformListDatabaseTests(DatabaseTest):
         self.assertEqual(transform.cond_artist, False)
         self.assertEqual(transform.cond_album, False)
         self.assertEqual(transform.cond_title, False)
+        self.assertEqual(transform.cond_ensemble, False)
+        self.assertEqual(transform.cond_conductor, False)
+        self.assertEqual(transform.cond_composer, False)
         self.assertEqual(transform.change_artist, False)
         self.assertEqual(transform.change_album, False)
         self.assertEqual(transform.change_title, False)
+        self.assertEqual(transform.change_ensemble, False)
+        self.assertEqual(transform.change_conductor, False)
+        self.assertEqual(transform.change_composer, False)
         self.assertEqual(transform.pattern_artist, '')
         self.assertEqual(transform.pattern_album, '')
         self.assertEqual(transform.pattern_title, '')
+        self.assertEqual(transform.pattern_ensemble, '')
+        self.assertEqual(transform.pattern_conductor, '')
+        self.assertEqual(transform.pattern_composer, '')
         self.assertEqual(transform.to_artist, '')
         self.assertEqual(transform.to_album, '')
         self.assertEqual(transform.to_title, '')
+        self.assertEqual(transform.to_ensemble, '')
+        self.assertEqual(transform.to_conductor, '')
+        self.assertEqual(transform.to_composer, '')
 
     def test_load_full_transform(self):
         """
@@ -1449,24 +1857,40 @@ class TransformListDatabaseTests(DatabaseTest):
         possible values set.
         """
         self.add_transform(cond_artist=True, cond_album=True, cond_title=True,
+            cond_ensemble=True, cond_composer=True, cond_conductor=True,
             change_artist=True, change_album=True, change_title=True,
+            change_ensemble=True, change_composer=True, change_conductor=True,
             pattern_artist='Artist', pattern_album='Album', pattern_title='Title',
-            to_artist='Artist 2', to_album='Album 2', to_title='Title 2')
+            pattern_ensemble='Ensemble', pattern_composer='Composer', pattern_conductor='Conductor',
+            to_artist='Artist 2', to_album='Album 2', to_title='Title 2',
+            to_ensemble='Ensemble 2', to_composer='Composer 2', to_conductor='Conductor 2')
         self.app.load_data()
         self.assertEqual(len(self.app.transforms), 1)
         transform = self.app.transforms.transforms[1]
         self.assertEqual(transform.cond_artist, True)
         self.assertEqual(transform.cond_album, True)
         self.assertEqual(transform.cond_title, True)
+        self.assertEqual(transform.cond_ensemble, True)
+        self.assertEqual(transform.cond_composer, True)
+        self.assertEqual(transform.cond_conductor, True)
         self.assertEqual(transform.change_artist, True)
         self.assertEqual(transform.change_album, True)
         self.assertEqual(transform.change_title, True)
+        self.assertEqual(transform.change_ensemble, True)
+        self.assertEqual(transform.change_composer, True)
+        self.assertEqual(transform.change_conductor, True)
         self.assertEqual(transform.pattern_artist, 'Artist')
         self.assertEqual(transform.pattern_album, 'Album')
         self.assertEqual(transform.pattern_title, 'Title')
+        self.assertEqual(transform.pattern_ensemble, 'Ensemble')
+        self.assertEqual(transform.pattern_composer, 'Composer')
+        self.assertEqual(transform.pattern_conductor, 'Conductor')
         self.assertEqual(transform.to_artist, 'Artist 2')
         self.assertEqual(transform.to_album, 'Album 2')
         self.assertEqual(transform.to_title, 'Title 2')
+        self.assertEqual(transform.to_ensemble, 'Ensemble 2')
+        self.assertEqual(transform.to_composer, 'Composer 2')
+        self.assertEqual(transform.to_conductor, 'Conductor 2')
 
 class AlbumTests(unittest.TestCase):
     """
@@ -1508,6 +1932,9 @@ class TrackTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.ensemble, 'Group')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.conductor, 'Conductor')
         self.assertEqual(track.tracknum, 1)
         self.assertEqual(track.seconds, 2.0)
 
@@ -1531,17 +1958,24 @@ class TrackTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.ensemble, 'Group')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.conductor, 'Conductor')
         self.assertEqual(track.tracknum, 1)
         self.assertEqual(track.seconds, 2.0)
 
     def test_load_m4a_file(self):
         """
-        Tests loading an m4a file
+        Tests loading an m4a file.  Note that m4a tags don't seem to
+        actually support ensemble or conductor.
         """
         track = Track.from_filename(self.track_path('silence.m4a'))
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.ensemble, '')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.conductor, '')
         self.assertEqual(track.tracknum, 1)
         self.assertEqual(round(track.seconds), 2)
 
@@ -1553,6 +1987,9 @@ class TrackTests(unittest.TestCase):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.ensemble, 'Group')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.conductor, 'Conductor')
         self.assertEqual(track.tracknum, 1)
         self.assertEqual(track.seconds, 2.0)
 
@@ -1852,6 +2289,7 @@ class TrackDatabaseTests(DatabaseTest):
         Tests a simple track insert
         """
         track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', composer='Composer', conductor='Conductor',
             tracknum=1, seconds=10, album_id=42, last_transform=5)
         pk = track.insert(self.app.db,
             self.app.curs,
@@ -1864,6 +2302,9 @@ class TrackDatabaseTests(DatabaseTest):
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
         self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['ensemble'], 'Ensemble')
+        self.assertEqual(track_row['composer'], 'Composer')
+        self.assertEqual(track_row['conductor'], 'Conductor')
         self.assertEqual(track_row['source'], 'xmms')
         self.assertEqual(track_row['album_id'], 42)
         self.assertEqual(track_row['tracknum'], 1)
@@ -1886,6 +2327,9 @@ class TrackDatabaseTests(DatabaseTest):
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], '')
         self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['ensemble'], '')
+        self.assertEqual(track_row['composer'], '')
+        self.assertEqual(track_row['conductor'], '')
         self.assertEqual(track_row['source'], 'xmms')
         self.assertEqual(track_row['album_id'], 0)
         self.assertEqual(track_row['tracknum'], None)
@@ -1926,7 +2370,8 @@ class TrackDatabaseTests(DatabaseTest):
         """
         Tests an update of ourselves.
         """
-        track = Track(artist='Artist', album='Album', title='Title')
+        track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', conductor='Conductor', composer='Composer')
         pk = track.insert(self.app.db,
             self.app.curs,
             'xmms',
@@ -1938,23 +2383,33 @@ class TrackDatabaseTests(DatabaseTest):
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
         self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['ensemble'], 'Ensemble')
+        self.assertEqual(track_row['composer'], 'Composer')
+        self.assertEqual(track_row['conductor'], 'Conductor')
 
         # Now update the object and save out, and test.
         track.artist = 'Artist 2'
         track.album = 'Album 2'
         track.title = 'Title 2'
+        track.ensemble = 'Ensemble 2'
+        track.composer = 'Composer 2'
+        track.conductor = 'Conductor 2'
         track.update(self.app.db, self.app.curs)
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(pk)
         self.assertEqual(track_row['artist'], 'Artist 2')
         self.assertEqual(track_row['album'], 'Album 2')
         self.assertEqual(track_row['title'], 'Title 2')
+        self.assertEqual(track_row['ensemble'], 'Ensemble 2')
+        self.assertEqual(track_row['composer'], 'Composer 2')
+        self.assertEqual(track_row['conductor'], 'Conductor 2')
 
     def test_update_no_commit(self):
         """
         Tests an update of ourselves without committing
         """
-        track = Track(artist='Artist', album='Album', title='Title')
+        track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', conductor='Conductor', composer='Composer')
         pk = track.insert(self.app.db,
             self.app.curs,
             'xmms',
@@ -1966,23 +2421,35 @@ class TrackDatabaseTests(DatabaseTest):
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
         self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['ensemble'], 'Ensemble')
+        self.assertEqual(track_row['composer'], 'Composer')
+        self.assertEqual(track_row['conductor'], 'Conductor')
 
         # Now update the object and save out, and test.
         track.artist = 'Artist 2'
         track.album = 'Album 2'
         track.title = 'Title 2'
+        track.ensemble = 'Ensemble 2'
+        track.composer = 'Composer 2'
+        track.conductor = 'Conductor 2'
         track.update(self.app.db, self.app.curs, commit=False)
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(pk)
         self.assertEqual(track_row['artist'], 'Artist 2')
         self.assertEqual(track_row['album'], 'Album 2')
         self.assertEqual(track_row['title'], 'Title 2')
+        self.assertEqual(track_row['ensemble'], 'Ensemble 2')
+        self.assertEqual(track_row['composer'], 'Composer 2')
+        self.assertEqual(track_row['conductor'], 'Conductor 2')
         self.app.db.rollback()
         self.assertEqual(self.get_track_count(), 1)
         track_row = self.get_track_by_id(pk)
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
         self.assertEqual(track_row['title'], 'Title')
+        self.assertEqual(track_row['ensemble'], 'Ensemble')
+        self.assertEqual(track_row['composer'], 'Composer')
+        self.assertEqual(track_row['conductor'], 'Conductor')
 
     def test_update_no_pk(self):
         """
@@ -1999,6 +2466,7 @@ class TrackDatabaseTests(DatabaseTest):
         Tests creation of a Track object from a database row.
         """
         orig_track = Track(artist='Artist', album='Album', title='Title',
+            ensemble='Ensemble', conductor='Conductor', composer='Composer',
             tracknum=1, seconds=10, album_id=42, last_transform=5)
         pk = orig_track.insert(self.app.db,
             self.app.curs,
@@ -2010,6 +2478,9 @@ class TrackDatabaseTests(DatabaseTest):
         self.assertEqual(track.artist, 'Artist')
         self.assertEqual(track.album, 'Album')
         self.assertEqual(track.title, 'Title')
+        self.assertEqual(track.ensemble, 'Ensemble')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.conductor, 'Conductor')
         self.assertEqual(track.seconds, 10)
         self.assertEqual(track.album_id, 42)
         self.assertEqual(track.last_transform, 5)
@@ -2298,6 +2769,9 @@ class LogTrackTests(DatabaseTest):
         self.assertEqual(track_row['artist'], 'Artist')
         self.assertEqual(track_row['album'], 'Album')
         self.assertEqual(track_row['title'], 'Track')
+        self.assertEqual(track_row['ensemble'], 'Group')
+        self.assertEqual(track_row['composer'], 'Composer')
+        self.assertEqual(track_row['conductor'], 'Conductor')
         self.assertEqual(track_row['source'], 'xmms')
         self.assertEqual(track_row['album_id'], 0)
         self.assertEqual(track_row['tracknum'], 1)
