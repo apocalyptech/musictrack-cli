@@ -581,19 +581,19 @@ class App(object):
 
     default_database = 'db.ini'
 
-    max_artist_album_length = 90
+    max_artist_album_length = 200
 
     schema_track_drop = 'drop table if exists track'
     schema_track_truncate = 'truncate track'
-    schema_track = """create table track (   
+    schema_track = """create table track (
             id int not null auto_increment,
             timestamp datetime, 
             artist varchar(200) not null,
-            title varchar(200) not null,
-            album varchar(200),
+            title varchar(255) not null,
+            album varchar(200) not null,
             tracknum int,
             seconds int, 
-            source enum('xmms', 'car', 'stereo', 'cafe'),
+            source enum('xmms', 'car', 'stereo', 'cafe', 'vinyl') not null default 'xmms',
             album_id int default 0,
             lasttransform int not null default 0,
             primary key (id),
@@ -604,21 +604,21 @@ class App(object):
 
     schema_album_drop = 'drop table if exists album'
     schema_album_truncate = 'truncate album'
-    schema_album = """create table album (   
+    schema_album = """create table album (
             alid int not null auto_increment,
             alartist varchar(200) not null,
             alalbum varchar(200) not null,
             totaltracks int not null,
             totalseconds int not null,
             lasttransform int not null default 0,
-            altype enum('album', 'ep', 'live') default 'album',
+            altype enum('album', 'ep', 'live') not null default 'album',
             primary key (alid),
             unique index idx_total (alartist, alalbum)
         ) engine=innodb"""
 
     schema_transform_drop = 'drop table if exists transform'
     schema_transform_truncate = 'truncate transform'
-    schema_transform = """create table transform (   
+    schema_transform = """create table transform (
             tid int not null auto_increment,
             artistcond bool not null default 0,
             albumcond bool not null default 0,
@@ -628,10 +628,10 @@ class App(object):
             titlechange bool not null default 0,
             artistpat varchar(200),
             albumpat varchar(200),
-            titlepat varchar(200),
+            titlepat varchar(255),
             artistto varchar(200),
             albumto varchar(200),
-            titleto varchar(200), 
+            titleto varchar(255), 
             primary key (tid)
         ) engine=innodb"""
 
