@@ -31,6 +31,7 @@ third-party modules:
 
 * mutagen
 * mysqlclient
+* parsedatetime
 
 By default the utils will all use a database definition file of the name ``db.ini``,
 though alternate files can be specified on the commandline for all utils.  An
