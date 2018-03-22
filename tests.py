@@ -3519,6 +3519,19 @@ class AddAlbumTests(DatabaseTest):
         self.assertIn('Unable to load', status)
         self.assertEqual(self.get_album_count(), 0)
 
+    def test_add_unicode_char(self):
+        """
+        Tests adding an album with a unicode char in the album namae
+        """
+        self.add_mp3(set_artist=True, artist='Artist',
+            set_album=True, album='Unicode Char: œ')
+        (added, status) = self.app.add_album(self.filenames)
+        self.assertEqual(added, True)
+        self.assertEqual(self.get_album_count(), 1)
+        album = Album.get_by_artist_album(self.app.curs, 'Artist', 'Unicode Char: œ')
+        self.assertNotEqual(album, None)
+        self.assertEqual(album.album, 'Unicode Char: œ')
+
 class AssociateAlbumTests(DatabaseTest):
     """
     Class for our album-association util, which associates any unassociated

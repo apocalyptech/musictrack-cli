@@ -758,7 +758,14 @@ class App(object):
         db_pass = section['pass']
 
         # Now connect to the database to make sure we're good there.
-        self.db = MySQLdb.connect(host=db_host, user=db_user, passwd=db_pass, db=db_name)
+        self.db = MySQLdb.connect(
+                host=db_host,
+                user=db_user,
+                passwd=db_pass,
+                db=db_name,
+                use_unicode=True,
+                charset='utf8',
+                )
         self.curs = self.db.cursor(MySQLdb.cursors.DictCursor)
 
         # Set sql_mode to traditional.  This will cause Exceptions to be thrown for stuff
