@@ -400,6 +400,7 @@ class Track(object):
             seconds = audio.info.length
 
         elif (str(type(audio)) == "<class 'mutagen.oggvorbis.OggVorbis'>" or
+                str(type(audio)) == "<class 'mutagen.oggopus.OggOpus'>" or
                 str(type(audio)) == "<class 'mutagen.flac.FLAC'>"):
             if 'artist' in audio:
                 artist = str(audio['artist'][0]).strip().strip("\x00")

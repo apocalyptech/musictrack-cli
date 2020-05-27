@@ -1964,6 +1964,20 @@ class TrackTests(unittest.TestCase):
         self.assertEqual(track.tracknum, 1)
         self.assertEqual(track.seconds, 2.0)
 
+    def test_load_opus_file(self):
+        """
+        Tests loading an ogg opus file
+        """
+        track = Track.from_filename(self.track_path('silence.opus'))
+        self.assertEqual(track.artist, 'Artist')
+        self.assertEqual(track.album, 'Album')
+        self.assertEqual(track.title, 'Track')
+        self.assertEqual(track.ensemble, 'Group')
+        self.assertEqual(track.composer, 'Composer')
+        self.assertEqual(track.conductor, 'Conductor')
+        self.assertEqual(track.tracknum, 1)
+        self.assertEqual(track.seconds, 2.0)
+
     def test_load_m4a_file(self):
         """
         Tests loading an m4a file.  Note that m4a tags don't seem to
