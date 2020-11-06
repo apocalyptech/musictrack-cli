@@ -45,7 +45,7 @@ writer.writerow(['Year', 'Tracks', 'Hours', 'Minutes Per Track'])
 # Now loop through and get our counts
 track_counts = {}
 seconds_counts = {}
-for year in range(min_year, max_year):
+for year in range(min_year, max_year+1):
 
     where_clause = 'timestamp >= "{thisyear}-01-01 00:00:00" and ' \
             'timestamp < "{nextyear}-01-01 00:00:00"'.format(
