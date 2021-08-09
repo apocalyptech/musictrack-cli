@@ -362,6 +362,7 @@ class Track(object):
         Reads file information from a filename
         """
 
+        filename = os.path.expanduser(filename)
         if not os.path.exists(filename):
             raise Exception('"%s" is not found' % (filename))
 
